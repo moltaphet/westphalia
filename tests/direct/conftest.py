@@ -13,6 +13,17 @@ COLLATERAL = 2000 * ATTO
 BOND = 1000 * ATTO
 MIN_DISPUTE = 500 * ATTO
 
+# Valid typed parameter sets per treaty kind (V2 schema).
+PARAMS = {
+    "NON_AGGRESSION": '{"max_exploit_bps": 300, "max_mev_events": 2}',
+    "TRADE_CORRIDOR": '{"min_settlement_volume": 100000, "max_slippage_bps": 50}',
+    "DATA_SHARING": '{"min_uptime_bps": 9900, "max_latency_bps": 250}',
+}
+
+
+def params_for(kind: str) -> str:
+    return PARAMS[kind]
+
 
 def addr_hex(a) -> str:
     """Canonical 0x-hex for a test address, matching the in-VM Address.as_hex
@@ -81,7 +92,7 @@ def active_treaty(contract, direct_vm, alice, bob, expires_at=4_000_000_000):
     bob_key = khex(contract, direct_vm, bob)
     direct_vm.sender = alice
     direct_vm.value = BOND
-    tid = contract.propose_treaty(bob_key, "NON_AGGRESSION", "no staging within 3 tiles", expires_at)
+    tid = contract.propose_treaty(bob_key, "NON_AGGRESSION", "no staging within 3 tiles", expires_at, params_for("NON_AGGRESSION"))
     direct_vm.value = 0
 
     direct_vm.sender = bob
@@ -96,7 +107,7 @@ def add_treaty(contract, direct_vm, proposer, counterparty, kind="TRADE_CORRIDOR
     cp = khex(contract, direct_vm, counterparty)
     direct_vm.sender = proposer
     direct_vm.value = BOND
-    tid = contract.propose_treaty(cp, kind, "auxiliary terms", expires_at)
+    tid = contract.propose_treaty(cp, kind, "auxiliary terms", expires_at, params_for(kind))
     direct_vm.value = 0
     direct_vm.sender = counterparty
     direct_vm.value = BOND

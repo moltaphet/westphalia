@@ -225,10 +225,21 @@ malformed output; (7) a deterministic replay index over
   (3 checks)`. (The optional heavy SDK-validation step needs a 310 MB download
   that was unreliable in this environment; the on-chain deploy below compiled
   the contract against the real runner with no code errors.)
-- Direct tests: `pytest tests/direct/ -v` -> **9 passed** (in-memory, ~0.3s),
-  covering all nine mandatory adversarial cases. The suite requires Python 3.12
-  (the local default Python 3.14 breaks a transitive test dependency), e.g.
+- Direct tests: `pytest tests/direct/ -v` -> **15 passed** (in-memory, ~5s):
+  9 baseline adversarial cases (`test_westphalia.py`) plus 6 V2 cases
+  (`test_westphalia_v2.py`) covering dual-feed telemetry agreement/divergence,
+  amicable dissolution, reputation-scaled dispute bonds, anti-Sybil enclave
+  maturation, and strict solvency. The suite requires Python 3.12 (the local
+  default Python 3.14 breaks a transitive test dependency), e.g.
   `uv venv --python 3.12 && uv pip install genlayer-test`.
+- V2 protocol: dual independent telemetry feeds with a deterministic >5%
+  divergence check that forces `MALICIOUS_REPORT`; typed per-kind treaty
+  parameter schemas (non-aggression / trade-corridor / data-sharing) with
+  upfront rejection of unmapped keys; reputation-scaled variable dispute bonds
+  (`MIN * (150 - min(rep, 100)) / 100`) with an anti-Sybil bond cap below
+  reputation 30; an enclave maturation delay before high-tier treaties; and
+  amicable mutual dissolution (`dissolve_treaty`) that refunds both bonds with
+  zero penalty once both parties sign.
 - Deployment: the contract **compiles on GenLayer Studio Devnet** (the deploy
   transaction reached the fee/consensus stage). Finalizing a fresh deployment is
   currently blocked on deployer funding: every keystore account holds 0 GEN on

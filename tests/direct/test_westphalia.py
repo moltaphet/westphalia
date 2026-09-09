@@ -19,6 +19,7 @@ from conftest import (
     fund,
     mock_telemetry,
     mock_verdict,
+    params_for,
 )
 
 
@@ -58,7 +59,7 @@ def test_unauthorized_and_unratified(direct_vm, direct_deploy, direct_alice, dir
     # Unratified (still PROPOSED) treaty.
     direct_vm.sender = direct_alice
     direct_vm.value = BOND
-    tid2 = c.propose_treaty(khex(c, direct_vm, direct_bob), "TRADE_CORRIDOR", "terms", 4_000_000_000)
+    tid2 = c.propose_treaty(khex(c, direct_vm, direct_bob), "TRADE_CORRIDOR", "terms", 4_000_000_000, params_for("TRADE_CORRIDOR"))
     direct_vm.value = 0
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
