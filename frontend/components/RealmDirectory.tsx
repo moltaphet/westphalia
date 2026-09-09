@@ -29,7 +29,7 @@ export default function RealmDirectory({
   }, [enclaves, query]);
 
   return (
-    <div className="pointer-events-auto absolute left-4 top-[132px] z-30 w-[280px] font-mono">
+    <div className="pointer-events-auto w-full shrink-0 font-mono">
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 bg-slate-900/85 px-3 py-2 text-[11px] font-bold tracking-widest text-slate-200 shadow-hud backdrop-blur-md hover:border-cyan-500/60"

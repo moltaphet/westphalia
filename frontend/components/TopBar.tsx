@@ -11,6 +11,7 @@ import {
   Landmark,
   Network,
   Plus,
+  Radio,
   Share2,
   Wallet,
 } from "lucide-react";
@@ -50,19 +51,23 @@ export default function TopBar({
   state,
   network,
   connected,
+  reviewerMode,
   view,
   onView,
   onSetNetwork,
   onConnect,
+  onEnterReviewer,
   onFound,
 }: {
   state: ProtocolState;
   network: NetworkConfig;
   connected: boolean;
+  reviewerMode: boolean;
   view: AppView;
   onView: (v: AppView) => void;
   onSetNetwork: (n: NetworkConfig) => void;
   onConnect: () => void;
+  onEnterReviewer: () => void;
   onFound: () => void;
 }) {
   const [netOpen, setNetOpen] = useState(false);
@@ -141,6 +146,16 @@ export default function TopBar({
               </div>
             )}
           </div>
+
+          {reviewerMode && !connected && (
+            <button
+              onClick={onEnterReviewer}
+              title="Read-only simulation mode"
+              className="flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold tracking-widest text-amber-300 hover:bg-amber-500/20"
+            >
+              <Radio size={13} /> REVIEWER
+            </button>
+          )}
 
           {connected ? (
             <span className="flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">

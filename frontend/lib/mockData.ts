@@ -235,6 +235,29 @@ export const LEDGER: LedgerEvent[] = [
     message: "Trade corridor treaty t1 signed with Vanguard Nexus.",
     valueGen: 42000,
   },
+  {
+    id: "e7",
+    block: 1839902,
+    kind: "treaty-signed",
+    actor: "vanguard",
+    message: "Mutual Defense Pact ratified between Vanguard Nexus and Citadel Alpha.",
+    valueGen: 15000,
+  },
+  {
+    id: "e8",
+    block: 1839640,
+    kind: "escrow-released",
+    actor: "protocol",
+    message: "Escrow tranche released to Sovereign Enclave under treaty t2.",
+    valueGen: 6200,
+  },
+  {
+    id: "e9",
+    block: 1839310,
+    kind: "consensus-verdict",
+    actor: "protocol",
+    message: "Telemetry heartbeat verified across 4 sovereignties. Quorum healthy.",
+  },
 ];
 
 export function shortAddress(addr: string): string {

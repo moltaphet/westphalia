@@ -7,7 +7,6 @@ import { useWestphaliaStore } from "@/lib/store";
 import HudOverlay from "./HudOverlay";
 import TopBar from "./TopBar";
 import GlobalFeedback from "./GlobalFeedback";
-import RealmDirectory from "./RealmDirectory";
 import FoundRealmModal from "./FoundRealmModal";
 import TopologyView from "./views/TopologyView";
 import TribunalView from "./views/TribunalView";
@@ -57,19 +56,12 @@ export default function Experience() {
             state={s.state}
             selectedId={s.selectedId}
             selectedTreaty={s.selectedTreaty}
-            reviewerMode={s.reviewerMode}
-            connected={s.connected}
             onSelectTreaty={s.setSelectedTreaty}
-            onEnterReviewer={s.enterReviewerMode}
+            onFocusEnclave={s.focusEnclave}
             onPropose={s.proposeTreaty}
             onDispute={s.triggerDispute}
             onClaim={s.claimEscrow}
             onOverlayChange={setHudOverlayOpen}
-          />
-          <RealmDirectory
-            enclaves={s.enclaves}
-            selectedId={s.selectedId}
-            onFocus={s.focusEnclave}
           />
         </>
       )}
@@ -92,10 +84,12 @@ export default function Experience() {
         state={s.state}
         network={s.network}
         connected={s.connected}
+        reviewerMode={s.reviewerMode}
         view={view}
         onView={setView}
         onSetNetwork={s.setNetwork}
         onConnect={s.connectWallet}
+        onEnterReviewer={s.enterReviewerMode}
         onFound={() => setFoundOpen(true)}
       />
       <GlobalFeedback pipeline={s.pipeline} lastReceipt={s.lastReceipt} />

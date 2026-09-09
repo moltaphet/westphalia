@@ -27,15 +27,14 @@ import type {
 } from "@/lib/types";
 import { auditForEvent, shortAddress } from "@/lib/mockData";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/board";
+import RealmDirectory from "./RealmDirectory";
 
 interface Props {
   state: ProtocolState;
   selectedId: string | null;
   selectedTreaty: string | null;
-  reviewerMode: boolean;
-  connected: boolean;
   onSelectTreaty: (id: string | null) => void;
-  onEnterReviewer: () => void;
+  onFocusEnclave: (id: string) => void;
   onPropose: (partnerId: string, kind: TreatyKind, terms: string, bond: number) => void;
   onDispute: (treatyId: string, evidence: string) => void;
   onClaim: (treatyId: string) => void;
@@ -176,7 +175,7 @@ function Dossier({
   }, [sov, state.treaties]);
 
   return (
-    <div className="pointer-events-none absolute right-4 top-32 bottom-24 flex w-[344px] flex-col gap-3">
+    <div className="pointer-events-none absolute right-4 top-[132px] bottom-20 flex w-[344px] flex-col gap-3">
       <Panel className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Shield size={15} className="text-cyan-400" />
@@ -194,10 +193,10 @@ function Dossier({
           ) : (
             <div className="flex flex-col gap-3">
               <div>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-base font-bold text-slate-100">{sov.name}</h2>
                   <span
-                    className="rounded px-2 py-0.5 text-[9px] font-bold tracking-widest"
+                    className="shrink-0 rounded px-2 py-0.5 text-[9px] font-bold tracking-widest"
                     style={{
                       color: STATUS_COLOR[sov.status],
                       backgroundColor: `${STATUS_COLOR[sov.status]}22`,
@@ -345,17 +344,16 @@ function LedgerFeed({
   onSelectEvent: (ev: LedgerEvent) => void;
 }) {
   return (
-    <div className="pointer-events-none absolute left-4 top-32 bottom-24 flex w-[320px] flex-col">
-      <Panel className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
-          <Radio size={15} className="text-emerald-400 animate-pulseGlow" />
-          <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">
-            LIVE TREATY FEED
-          </span>
-          <span className="ml-auto text-[8px] tracking-widest text-slate-500">CLICK TO AUDIT</span>
-        </div>
-        <div className="hud-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2">
-          <div className="flex flex-col gap-1.5">
+    <Panel className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
+        <Radio size={15} className="text-emerald-400 animate-pulseGlow" />
+        <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">
+          LIVE TREATY FEED
+        </span>
+        <span className="ml-auto text-[8px] tracking-widest text-slate-500">CLICK TO AUDIT</span>
+      </div>
+      <div className="hud-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2 pb-6">
+        <div className="flex flex-col gap-1.5">
             {ledger.map((ev) => (
               <button
                 key={ev.id}
@@ -381,11 +379,12 @@ function LedgerFeed({
             ))}
           </div>
         </div>
-      </Panel>
-    </div>
+    </Panel>
   );
 }
 
+// Docked as a static footer inside the left column (not a floating overlay),
+// so feed cards never collide with it.
 function Legend() {
   const items: [string, string][] = [
     ["#10b981", "Alliance / trade link"],
@@ -394,19 +393,19 @@ function Legend() {
     ["#22d3ee", "Geneva escrow hub"],
   ];
   return (
-    <div className="pointer-events-none absolute bottom-4 left-4">
-      <Panel className="flex flex-col gap-1 px-3 py-2">
+    <Panel className="shrink-0 px-3 py-2">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
         {items.map(([c, label]) => (
           <div key={label} className="flex items-center gap-1.5">
             <span
-              className="h-2.5 w-2.5 rounded-sm"
+              className="h-2.5 w-2.5 shrink-0 rounded-sm"
               style={{ backgroundColor: c, boxShadow: `0 0 8px ${c}` }}
             />
             <span className="text-[10px] text-slate-400">{label}</span>
           </div>
         ))}
-      </Panel>
-    </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -758,10 +757,8 @@ export default function HudOverlay({
   state,
   selectedId,
   selectedTreaty,
-  reviewerMode,
-  connected,
   onSelectTreaty,
-  onEnterReviewer,
+  onFocusEnclave,
   onPropose,
   onDispute,
   onClaim,
@@ -804,26 +801,25 @@ export default function HudOverlay({
           rendered as root-level siblings so their z-[100] backdrops layer
           above the top bar and every scene label. */}
       <div className="pointer-events-none absolute inset-0 z-10 font-mono">
-        <LedgerFeed ledger={state.ledger} onSelectEvent={setAuditEvent} />
+        {/* Left column: directory, feed, and docked legend stacked vertically
+            so nothing overlaps. */}
+        <div className="pointer-events-none absolute left-4 top-[132px] bottom-4 flex w-[320px] flex-col gap-2">
+          <RealmDirectory
+            enclaves={state.enclaves}
+            selectedId={selectedId}
+            onFocus={onFocusEnclave}
+          />
+          <LedgerFeed ledger={state.ledger} onSelectEvent={setAuditEvent} />
+          <Legend />
+        </div>
+
         <Dossier
           state={state}
           selectedId={selectedId}
           selectedTreaty={selectedTreaty}
           onSelectTreaty={onSelectTreaty}
         />
-        <Legend />
         <ActionBar onAction={setModal} />
-
-        {reviewerMode && !connected && (
-          <div className="pointer-events-auto absolute right-4 top-[188px] z-20">
-            <button
-              onClick={onEnterReviewer}
-              className="flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[10px] font-bold tracking-widest text-amber-300 hover:bg-amber-500/20"
-            >
-              <Radio size={12} /> REVIEWER MODE
-            </button>
-          </div>
-        )}
       </div>
 
       {auditEvent && (
