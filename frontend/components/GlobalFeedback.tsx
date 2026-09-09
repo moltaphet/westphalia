@@ -10,7 +10,7 @@ import type { TxReceipt } from "@/lib/contract";
 function TxPipelineOverlay({ pipeline: p }: { pipeline: PipelineState | null }) {
   if (!p) return null;
   return (
-    <div className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 backdrop-blur-md">
       <div className="w-full max-w-md rounded-lg border border-cyan-500/40 bg-slate-900 p-5 shadow-hud">
         <div className="mb-4 flex items-center gap-2">
           {p.done ? (
@@ -115,7 +115,7 @@ export default function GlobalFeedback({
   lastReceipt: TxReceipt | null;
 }) {
   return (
-    <div className="pointer-events-none absolute inset-0 z-40 font-mono">
+    <div className="pointer-events-none absolute inset-0 z-[100] font-mono">
       <TxPipelineOverlay pipeline={pipeline} />
       <Toast receipt={lastReceipt} />
     </div>

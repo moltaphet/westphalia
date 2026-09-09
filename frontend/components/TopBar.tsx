@@ -69,8 +69,10 @@ export default function TopBar({
 
   return (
     <div className="pointer-events-none absolute left-0 right-0 top-0 z-30 flex flex-col items-center gap-2 px-4 pt-4 font-mono">
-      <div className="pointer-events-auto relative flex w-full max-w-7xl items-center justify-between gap-5 overflow-hidden rounded-md border border-slate-700/60 bg-slate-900/85 px-5 py-3 shadow-hud backdrop-blur-md">
-        <div className="scanline" />
+      <div className="pointer-events-auto relative z-30 flex w-full max-w-7xl items-center justify-between gap-5 rounded-md border border-slate-700/60 bg-slate-900/85 px-5 py-3 shadow-hud backdrop-blur-md">
+        {/* Scanline clips itself via its own overflow-hidden container so it
+            never clips the network dropdown that overflows the command bar. */}
+        <div className="scanline rounded-md" />
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded bg-emerald-500/15 text-emerald-400">
             <Landmark size={18} />
@@ -118,7 +120,7 @@ export default function TopBar({
               <ChevronDown size={12} />
             </button>
             {netOpen && (
-              <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded border border-slate-700 bg-slate-900 p-1 shadow-hud">
+              <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded border border-slate-700 bg-slate-900 p-1 shadow-hud">
                 {NETWORKS.map((n) => (
                   <button
                     key={n.key}
@@ -155,7 +157,7 @@ export default function TopBar({
         </div>
       </div>
 
-      <div className="pointer-events-auto flex w-full max-w-7xl items-center gap-1 rounded-md border border-slate-700/60 bg-slate-900/70 p-1 shadow-hud backdrop-blur-md">
+      <div className="pointer-events-auto relative z-10 flex w-full max-w-7xl items-center gap-1 rounded-md border border-slate-700/60 bg-slate-900/70 p-1 shadow-hud backdrop-blur-md">
         {TABS.map((t) => {
           const active = t.id === view;
           return (

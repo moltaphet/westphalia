@@ -20,6 +20,7 @@ interface Props {
   selectedId: string | null;
   focusId: string | null;
   selectedTreaty: string | null;
+  showLabels: boolean; // suppress Drei Html labels when a modal is open
   onHover: (id: string | null) => void;
   onSelect: (id: string | null) => void;
   onSelectTreaty: (id: string) => void;
@@ -60,6 +61,7 @@ export default function DiplomaticBoard({
   selectedId,
   focusId,
   selectedTreaty,
+  showLabels,
   onHover,
   onSelect,
   onSelectTreaty,
@@ -131,6 +133,7 @@ export default function DiplomaticBoard({
                 enclave={e}
                 layout={layout}
                 active={e.id === hoveredId || e.id === selectedId}
+                showLabel={showLabels}
                 onHover={onHover}
                 onSelect={onSelect}
               />
@@ -145,7 +148,7 @@ export default function DiplomaticBoard({
             onSelectTreaty={onSelectTreaty}
           />
 
-          <CentralPlatform totalEscrowGen={state.totalEscrowGen} baseY={HUB.floatY} />
+          <CentralPlatform totalEscrowGen={state.totalEscrowGen} baseY={HUB.floatY} showLabel={showLabels} />
 
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.8, 0]} receiveShadow>
             <planeGeometry args={[200, 200]} />

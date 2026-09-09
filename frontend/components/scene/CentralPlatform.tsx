@@ -10,9 +10,11 @@ import { Html } from "@react-three/drei";
 export default function CentralPlatform({
   totalEscrowGen,
   baseY = 0,
+  showLabel = true,
 }: {
   totalEscrowGen: number;
   baseY?: number;
+  showLabel?: boolean;
 }) {
   const platform = useRef<THREE.Group>(null);
   const rings = useRef<THREE.Group>(null);
@@ -76,27 +78,35 @@ export default function CentralPlatform({
         </mesh>
       </group>
 
-      <Html center distanceFactor={14} position={[0, 1.9, 0]} pointerEvents="none">
-        <div
-          style={{
-            fontFamily: "ui-monospace, monospace",
-            whiteSpace: "nowrap",
-            textAlign: "center",
-            color: "#e2e8f0",
-            textShadow: "0 0 8px rgba(34,211,238,0.8)",
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
+      {showLabel && (
+        <Html
+          center
+          distanceFactor={14}
+          position={[0, 1.9, 0]}
+          pointerEvents="none"
+          zIndexRange={[0, 10]}
         >
-          <div style={{ fontSize: 8, letterSpacing: 2, color: "#94a3b8" }}>
-            THE GENEVA PLATFORM
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              whiteSpace: "nowrap",
+              textAlign: "center",
+              color: "#e2e8f0",
+              textShadow: "0 0 8px rgba(34,211,238,0.8)",
+              pointerEvents: "none",
+              userSelect: "none",
+            }}
+          >
+            <div style={{ fontSize: 8, letterSpacing: 2, color: "#94a3b8" }}>
+              THE GENEVA PLATFORM
+            </div>
+            <div style={{ fontSize: 9, letterSpacing: 2, color: "#22d3ee" }}>GLOBAL ESCROW</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>
+              {totalEscrowGen.toLocaleString("en-US")} GEN
+            </div>
           </div>
-          <div style={{ fontSize: 9, letterSpacing: 2, color: "#22d3ee" }}>GLOBAL ESCROW</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>
-            {totalEscrowGen.toLocaleString("en-US")} GEN
-          </div>
-        </div>
-      </Html>
+        </Html>
+      )}
     </group>
   );
 }

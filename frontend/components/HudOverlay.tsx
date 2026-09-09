@@ -39,6 +39,7 @@ interface Props {
   onPropose: (partnerId: string, kind: TreatyKind, terms: string, bond: number) => void;
   onDispute: (treatyId: string, evidence: string) => void;
   onClaim: (treatyId: string) => void;
+  onOverlayChange: (open: boolean) => void;
 }
 
 type ModalKind = "propose" | "dispute" | "claim" | null;
@@ -490,7 +491,7 @@ function ConsensusAuditModal({
 }) {
   const breachCount = audit.validators.filter((v) => v.vote === "BREACH").length;
   return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-md">
       <div className="hud-scroll max-h-[86vh] w-full max-w-lg overflow-y-auto rounded-lg border border-cyan-500/40 bg-slate-900 shadow-hud">
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-700/60 bg-slate-900 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -588,7 +589,7 @@ function ModalShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-md">
       <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 shadow-hud">
         <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -764,9 +765,15 @@ export default function HudOverlay({
   onPropose,
   onDispute,
   onClaim,
+  onOverlayChange,
 }: Props) {
   const [modal, setModal] = useState<ModalKind>(null);
   const [auditEvent, setAuditEvent] = useState<LedgerEvent | null>(null);
+
+  // Report open state upward so the 3D scene can suppress its Html labels.
+  useEffect(() => {
+    onOverlayChange(modal !== null || auditEvent !== null);
+  }, [modal, auditEvent, onOverlayChange]);
 
   const disputableTreaties = state.treaties.filter(
     (t) => t.status === "active" || t.status === "pending"
@@ -792,27 +799,32 @@ export default function HudOverlay({
   }, []);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 font-mono">
-      <LedgerFeed ledger={state.ledger} onSelectEvent={setAuditEvent} />
-      <Dossier
-        state={state}
-        selectedId={selectedId}
-        selectedTreaty={selectedTreaty}
-        onSelectTreaty={onSelectTreaty}
-      />
-      <Legend />
-      <ActionBar onAction={setModal} />
+    <>
+      {/* HUD panels sit below the top command bar (z-10). Modals below are
+          rendered as root-level siblings so their z-[100] backdrops layer
+          above the top bar and every scene label. */}
+      <div className="pointer-events-none absolute inset-0 z-10 font-mono">
+        <LedgerFeed ledger={state.ledger} onSelectEvent={setAuditEvent} />
+        <Dossier
+          state={state}
+          selectedId={selectedId}
+          selectedTreaty={selectedTreaty}
+          onSelectTreaty={onSelectTreaty}
+        />
+        <Legend />
+        <ActionBar onAction={setModal} />
 
-      {reviewerMode && !connected && (
-        <div className="pointer-events-auto absolute right-4 top-[188px] z-20">
-          <button
-            onClick={onEnterReviewer}
-            className="flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[10px] font-bold tracking-widest text-amber-300 hover:bg-amber-500/20"
-          >
-            <Radio size={12} /> REVIEWER MODE
-          </button>
-        </div>
-      )}
+        {reviewerMode && !connected && (
+          <div className="pointer-events-auto absolute right-4 top-[188px] z-20">
+            <button
+              onClick={onEnterReviewer}
+              className="flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[10px] font-bold tracking-widest text-amber-300 hover:bg-amber-500/20"
+            >
+              <Radio size={12} /> REVIEWER MODE
+            </button>
+          </div>
+        )}
+      </div>
 
       {auditEvent && (
         <ConsensusAuditModal
@@ -853,6 +865,6 @@ export default function HudOverlay({
           }}
         />
       )}
-    </div>
+    </>
   );
 }

@@ -30,6 +30,13 @@ export default function Experience() {
   const s = useWestphaliaStore();
   const [view, setView] = useState<AppView>("world");
   const [foundOpen, setFoundOpen] = useState(false);
+  // True while any HUD modal / audit inspector is open (reported by HudOverlay).
+  const [hudOverlayOpen, setHudOverlayOpen] = useState(false);
+
+  // Suppress Drei Html scene labels whenever a modal/dialog is open so they
+  // never bleed through the blurred backdrop. (Non-world views unmount the
+  // board entirely, so labels are already gone there.)
+  const showLabels = !foundOpen && !hudOverlayOpen;
 
   return (
     <>
@@ -41,6 +48,7 @@ export default function Experience() {
             selectedId={s.selectedId}
             focusId={s.focusId}
             selectedTreaty={s.selectedTreaty}
+            showLabels={showLabels}
             onHover={s.setHoveredId}
             onSelect={s.selectEnclave}
             onSelectTreaty={s.setSelectedTreaty}
@@ -56,6 +64,7 @@ export default function Experience() {
             onPropose={s.proposeTreaty}
             onDispute={s.triggerDispute}
             onClaim={s.claimEscrow}
+            onOverlayChange={setHudOverlayOpen}
           />
           <RealmDirectory
             enclaves={s.enclaves}

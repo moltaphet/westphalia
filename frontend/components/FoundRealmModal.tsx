@@ -31,7 +31,7 @@ export default function FoundRealmModal({
   );
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm font-mono">
+    <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-md font-mono">
       <div className="w-full max-w-lg rounded-lg border border-emerald-500/40 bg-slate-900 shadow-hud">
         <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
           <div className="flex items-center gap-2">

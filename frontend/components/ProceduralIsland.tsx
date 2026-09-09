@@ -15,6 +15,7 @@ interface Props {
   enclave: AgentEnclave;
   layout: IslandLayout;
   active: boolean;
+  showLabel: boolean;
   onHover: (id: string | null) => void;
   onSelect: (id: string | null) => void;
 }
@@ -40,6 +41,7 @@ export default function ProceduralIsland({
   enclave,
   layout,
   active,
+  showLabel,
   onHover,
   onSelect,
 }: Props) {
@@ -139,25 +141,35 @@ export default function ProceduralIsland({
       )}
       {status === "Slashed" && <ContainmentGrid position={[cx * TILE, cz * TILE]} baseY={baseY} />}
 
-      {/* Floating label with sector hazard */}
-      <Html center distanceFactor={20} position={[cx * TILE, baseY + 4.4, cz * TILE]} pointerEvents="none">
-        <div
-          style={{
-            fontFamily: "ui-monospace, monospace",
-            whiteSpace: "nowrap",
-            textAlign: "center",
-            userSelect: "none",
-            pointerEvents: "none",
-          }}
+      {/* Floating label with sector hazard. Suppressed while a modal is open,
+          and clamped to a low zIndexRange so Drei never emits huge inline
+          z-indexes that bleed over HUD overlays and modals. */}
+      {showLabel && (
+        <Html
+          center
+          distanceFactor={20}
+          position={[cx * TILE, baseY + 4.4, cz * TILE]}
+          pointerEvents="none"
+          zIndexRange={[0, 10]}
         >
-          <div style={{ fontSize: 9, letterSpacing: 2, color: statusColor, textShadow: `0 0 8px ${statusColor}` }}>
-            {enclave.name.toUpperCase()}
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              whiteSpace: "nowrap",
+              textAlign: "center",
+              userSelect: "none",
+              pointerEvents: "none",
+            }}
+          >
+            <div style={{ fontSize: 9, letterSpacing: 2, color: statusColor, textShadow: `0 0 8px ${statusColor}` }}>
+              {enclave.name.toUpperCase()}
+            </div>
+            <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: 1 }}>
+              {STATUS_LABEL[status]} - HAZARD {enclave.hazardPct}%
+            </div>
           </div>
-          <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: 1 }}>
-            {STATUS_LABEL[status]} - HAZARD {enclave.hazardPct}%
-          </div>
-        </div>
-      </Html>
+        </Html>
+      )}
     </group>
   );
 }
