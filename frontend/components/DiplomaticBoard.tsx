@@ -116,10 +116,24 @@ export default function DiplomaticBoard({
 
   const treatyFocus = hoveredId ?? selectedId;
 
+  // Force an immediate resize after mount so R3F sizes the drawing buffer and
+  // paints frame 0 without waiting for the first user interaction.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="absolute inset-0">
       <CursorManager hovered={hoveredId !== null} />
-      <Canvas shadows dpr={[1, 2]} gl={{ alpha: true, antialias: true }}>
+      <Canvas
+        shadows
+        frameloop="always"
+        dpr={[1, 2]}
+        gl={{ alpha: true, antialias: true }}
+      >
         {/* Deep atmospheric fog for cinematic depth falloff. */}
         <fogExp2 attach="fog" args={["#040711", 0.015]} />
         <PerspectiveCamera makeDefault position={[40, 34, 40]} fov={45} />
