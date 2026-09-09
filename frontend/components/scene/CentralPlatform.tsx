@@ -12,10 +12,12 @@ export default function CentralPlatform({
   totalEscrowGen,
   baseY = 0,
   showLabel = true,
+  scale = 1,
 }: {
   totalEscrowGen: number;
   baseY?: number;
   showLabel?: boolean;
+  scale?: number;
 }) {
   const platform = useRef<THREE.Group>(null);
   const ringX = useRef<THREE.Mesh>(null);
@@ -59,7 +61,7 @@ export default function CentralPlatform({
         />
       </mesh>
 
-      <group ref={platform} position={[0, hover, 0]}>
+      <group ref={platform} position={[0, hover, 0]} scale={scale}>
         {/* Hex plinth */}
         <mesh castShadow>
           <cylinderGeometry args={[1.6, 1.25, 0.3, 6]} />

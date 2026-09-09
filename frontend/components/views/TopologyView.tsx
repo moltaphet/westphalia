@@ -59,6 +59,20 @@ export default function TopologyView({
     });
   const visibleTreaties = state.treaties.filter((t) => active.has(t.kind));
 
+  // Node hover: highlight bilateral treaties and dim unrelated nodes/edges.
+  const [hovered, setHovered] = useState<string | null>(null);
+  const connected = useMemo(() => {
+    const set = new Set<string>();
+    if (!hovered) return set;
+    for (const t of state.treaties) {
+      if (t.parties.includes(hovered)) {
+        set.add(t.parties[0]);
+        set.add(t.parties[1]);
+      }
+    }
+    return set;
+  }, [hovered, state.treaties]);
+
   const edge = (t: Treaty) => {
     const a = pos.get(t.parties[0]) ?? [CX, CY];
     const b = pos.get(t.parties[1]) ?? [CX, CY];
@@ -101,11 +115,23 @@ export default function TopologyView({
         </div>
         <div className="min-h-0 flex-1 p-2">
           <svg viewBox="0 0 800 600" className="h-full w-full">
+            <defs>
+              <filter id="nodeGlow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
             {visibleTreaties.map((t) => {
               const { a, b, width, strokeColor, animated } = edge(t);
               const sel = t.id === selectedTreaty;
+              const dim = hovered !== null && !t.parties.includes(hovered);
+              const op = dim ? 0.1 : sel ? 1 : 0.72;
               return (
-                <g key={t.id}>
+                <g key={t.id} opacity={op}>
                   <line
                     x1={a[0]}
                     y1={a[1]}
@@ -113,32 +139,32 @@ export default function TopologyView({
                     y2={b[1]}
                     stroke={strokeColor}
                     strokeWidth={sel ? width + 2 : width}
-                    strokeOpacity={sel ? 1 : 0.7}
-                    className={animated ? "flow-dash" : undefined}
+                    className={animated && !dim ? "flow-dash" : undefined}
                     style={{ cursor: "pointer" }}
                     onClick={() => onSelectTreaty(t.id)}
                   />
-                  {/* Pulsing directed particle traveling parties[0] -> parties[1]. */}
-                  <circle r={sel ? 4 : 3} fill={strokeColor} style={{ pointerEvents: "none" }}>
-                    <animateMotion
-                      dur={`${2.4 + (t.bondGen % 5) * 0.3}s`}
-                      repeatCount="indefinite"
-                      path={`M${a[0]},${a[1]} L${b[0]},${b[1]}`}
-                    />
-                    <animate
-                      attributeName="opacity"
-                      values="0.2;1;0.2"
-                      dur="1.4s"
-                      repeatCount="indefinite"
-                    />
-                  </circle>
+                  {!dim && (
+                    <circle r={sel ? 4 : 3} fill={strokeColor} style={{ pointerEvents: "none" }}>
+                      <animateMotion
+                        dur={`${2.4 + (t.bondGen % 5) * 0.3}s`}
+                        repeatCount="indefinite"
+                        path={`M${a[0]},${a[1]} L${b[0]},${b[1]}`}
+                      />
+                      <animate
+                        attributeName="opacity"
+                        values="0.2;1;0.2"
+                        dur="1.4s"
+                        repeatCount="indefinite"
+                      />
+                    </circle>
+                  )}
                 </g>
               );
             })}
 
             {/* central hub */}
-            <g onClick={() => onSelectZone(null)} style={{ cursor: "pointer" }}>
-              <circle cx={CX} cy={CY} r={26} fill="#22d3ee22" stroke="#22d3ee" strokeWidth={1.5} />
+            <g onClick={() => onSelectZone(null)} style={{ cursor: "pointer" }} opacity={hovered ? 0.4 : 1}>
+              <circle cx={CX} cy={CY} r={26} fill="#22d3ee22" stroke="#22d3ee" strokeWidth={1.5} filter="url(#nodeGlow)" />
               <circle cx={CX} cy={CY} r={6} fill="#22d3ee" />
               <text x={CX} y={CY + 42} textAnchor="middle" fill="#cbd5e1" fontSize={12} fontFamily="ui-monospace, monospace">
                 GENEVA HUB
@@ -150,9 +176,25 @@ export default function TopologyView({
               const color = STATUS_COLOR[e.status];
               const active = e.id === selectedZone;
               const r = 24;
+              const dim = hovered !== null && hovered !== e.id && !connected.has(e.id);
               return (
-                <g key={e.id} onClick={() => onSelectZone(e.id)} style={{ cursor: "pointer" }}>
-                  <circle cx={x} cy={y} r={r + (active ? 6 : 0)} fill={`${color}22`} stroke={color} strokeWidth={active ? 3 : 1.5} />
+                <g
+                  key={e.id}
+                  opacity={dim ? 0.25 : 1}
+                  onClick={() => onSelectZone(e.id)}
+                  onMouseEnter={() => setHovered(e.id)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{ cursor: "pointer", transition: "opacity 0.2s" }}
+                >
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={r + (active || hovered === e.id ? 6 : 0)}
+                    fill={`${color}22`}
+                    stroke={color}
+                    strokeWidth={active || hovered === e.id ? 3 : 1.5}
+                    filter="url(#nodeGlow)"
+                  />
                   <circle cx={x} cy={y} r={6} fill={color} />
                   <text x={x} y={y + r + 14} textAnchor="middle" fill="#cbd5e1" fontSize={11} fontFamily="ui-monospace, monospace">
                     {e.name}

@@ -28,16 +28,23 @@ body {
 }
 
 /* Thin tactical scrollbars for HUD panels. */
-.hud-scroll::-webkit-scrollbar {
+.hud-scroll::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-.hud-scroll::-webkit-scrollbar-thumb {
+.hud-scroll::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.35);
   border-radius: 3px;
 }
-.hud-scroll::-webkit-scrollbar-track {
+.hud-scroll::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
 
 /* Animated dashed flow for topology treaty vectors. */

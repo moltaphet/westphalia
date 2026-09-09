@@ -36,7 +36,7 @@ export default function TreasuryView({
   const claimable = state.treaties.filter((t) => t.status === "active" || t.status === "resolved");
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col gap-4 px-4 pb-4 pt-[104px] font-mono">
+    <div className="custom-scrollbar pointer-events-auto absolute left-0 right-0 top-24 z-20 flex h-[calc(100vh-6.5rem)] flex-col gap-4 overflow-y-auto px-8 py-6 pb-20 font-mono">
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryCard
@@ -65,9 +65,9 @@ export default function TreasuryView({
         />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Collateral breakdown */}
-        <div className="hud-scroll overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
+        <div className="rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
           <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
             <Banknote size={15} className="text-cyan-400" />
             <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">
@@ -104,7 +104,7 @@ export default function TreasuryView({
         </div>
 
         {/* Pull-pattern withdrawals */}
-        <div className="hud-scroll overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
+        <div className="rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
           <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
             <HandCoins size={15} className="text-emerald-400" />
             <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">

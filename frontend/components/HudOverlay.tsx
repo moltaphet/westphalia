@@ -434,7 +434,7 @@ function ActionBar({ onAction }: { onAction: (m: ModalKind) => void }) {
       m: "propose",
       icon: <Shield size={16} />,
       label: "PROPOSE TREATY",
-      hotkey: "P",
+      hotkey: "C",
       tone: "border-emerald-500/50 text-emerald-200 hover:bg-emerald-500/20",
     },
     {
@@ -448,7 +448,7 @@ function ActionBar({ onAction }: { onAction: (m: ModalKind) => void }) {
       m: "claim",
       icon: <HandCoins size={16} />,
       label: "CLAIM ESCROW",
-      hotkey: "C",
+      hotkey: "E",
       tone: "border-cyan-500/50 text-cyan-200 hover:bg-cyan-500/20",
     },
   ];
@@ -803,9 +803,9 @@ export default function HudOverlay({
         return;
       }
       const k = e.key.toLowerCase();
-      if (k === "p") setModal("propose");
+      if (k === "c") setModal("propose");
       else if (k === "d") setModal("dispute");
-      else if (k === "c") setModal("claim");
+      else if (k === "e") setModal("claim");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

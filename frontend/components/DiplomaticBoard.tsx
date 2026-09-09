@@ -112,7 +112,7 @@ export default function DiplomaticBoard({
         camPos: [cx + 15, cy + 13, cz + 15],
       };
     }
-    return { target: [0, 2, 0], camPos: [56, 48, 56] };
+    return { target: [0, 2, 0], camPos: [40, 34, 40] };
   }, [focusId, layoutMap]);
 
   const treatyFocus = hoveredId ?? selectedId;
@@ -123,14 +123,14 @@ export default function DiplomaticBoard({
       <Canvas shadows dpr={[1, 2]} gl={{ alpha: true, antialias: true }}>
         {/* Deep atmospheric fog for cinematic depth falloff. */}
         <fogExp2 attach="fog" args={["#040711", 0.015]} />
-        <PerspectiveCamera makeDefault position={[56, 48, 56]} fov={32} />
+        <PerspectiveCamera makeDefault position={[40, 34, 40]} fov={45} />
         <OrbitControls
           makeDefault
           enableDamping
           dampingFactor={0.08}
           enablePan
-          minDistance={14}
-          maxDistance={140}
+          minDistance={16}
+          maxDistance={95}
           minPolarAngle={0.12}
           maxPolarAngle={Math.PI / 2.2}
           target={[0, 2, 0]}
@@ -200,7 +200,12 @@ export default function DiplomaticBoard({
             onSelectTreaty={onSelectTreaty}
           />
 
-          <CentralPlatform totalEscrowGen={state.totalEscrowGen} baseY={HUB.floatY} showLabel={showLabels} />
+          <CentralPlatform
+            totalEscrowGen={state.totalEscrowGen}
+            baseY={HUB.floatY}
+            showLabel={showLabels}
+            scale={1.4}
+          />
 
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.8, 0]} receiveShadow>
             <planeGeometry args={[200, 200]} />

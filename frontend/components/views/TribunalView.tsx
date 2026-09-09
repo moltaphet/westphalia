@@ -43,9 +43,9 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
   const audit = selected ? auditForEvent(selected) : null;
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[104px] font-mono">
+    <div className="custom-scrollbar pointer-events-auto absolute left-0 right-0 top-24 z-20 flex h-[calc(100vh-6.5rem)] items-start gap-4 overflow-y-auto px-8 py-6 pb-20 font-mono">
       {/* Docket */}
-      <div className="hud-scroll w-[300px] shrink-0 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
+      <div className="w-[300px] shrink-0 rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Gavel size={15} className="text-violet-400" />
           <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">DOCKET</span>
@@ -81,7 +81,7 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
       </div>
 
       {/* Courtroom */}
-      <div className="hud-scroll min-h-0 flex-1 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
+      <div className="flex-1 rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Scale size={15} className="text-cyan-400" />
           <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">
