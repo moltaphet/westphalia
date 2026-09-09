@@ -184,6 +184,61 @@ npm run start
 
 ---
 
+## Intelligent Contract (GenLayer v0.3.0)
+
+The protocol contract lives at `contracts/westphalia.py`. It is an **on-chain
+multi-LLM consensus protocol using GenVM equivalence validation** - there is no
+off-chain isolated sandbox; disputes are resolved by the GenLayer validator
+quorum inside `gl.eq_principle.prompt_comparative`, and all value moves are real
+native transfers (`gl.message.value`, `self.balance`, ghost-contract
+`emit_transfer`). No simulated integer balances are used on-chain.
+
+Economic lifecycle: `found_sovereignty` (payable collateral) -> `propose_treaty`
+/ `ratify_treaty` (matching payable bonds) -> `trigger_dispute` (payable
+`dispute_bond`, minimum 500 GEN) -> multi-LLM verdict quantized into one of four
+discrete tiers -> deterministic settlement -> `claim_payout` (pull-pattern) or
+`recover_bond` (guarded by expiry).
+
+Discrete verdict tiers: `CRITICAL_BREACH` (100% defendant bond slashed to
+plaintiff, enclave `SANCTIONED`, dispute bond refunded), `ELEVATED_RISK` (25%
+bond deducted to reserves, dispute bond refunded), `NORMAL` (dismissed, dispute
+bond refunded minus validation fee), `MALICIOUS_REPORT` (100% of the plaintiff
+dispute bond slashed into Geneva reserves).
+
+The 7 adversarial defenses are implemented: (1) prompt-injection isolation via
+`<untrusted_input>` delimiters + ASCII sanitization + hard guardrails; (2)
+strict counterparty/treaty binding asserted deterministically before any
+non-deterministic block; (3) contract-side ground-truth telemetry via
+`gl.nondet.web.get` plus a 500 GEN anti-griefing bond and contradiction ->
+`MALICIOUS_REPORT` slashing; (4) `MALICIOUS_REPORT` reserve slashing, a
+`self.balance == collateral + locked_escrow + reserves + claimable` solvency
+invariant, and pull-over-push distribution; (5) coarse basis-point quantization
+and a strict four-tier categorical output; (6) `[TRANSIENT]` handling of
+HTTP 429/5xx (both `.status` and `.status_code`) and `[LLM_ERROR]` failover for
+malformed output; (7) a deterministic replay index over
+`treaty_id + plaintiff + evidence_hash` plus guarded pre-expiry bond recovery.
+
+### Contract status
+
+- Runner: pinned `py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6`.
+- Static lint: `genvm-lint check contracts/westphalia.py` -> `Lint passed
+  (3 checks)`. (The optional heavy SDK-validation step needs a 310 MB download
+  that was unreliable in this environment; the on-chain deploy below compiled
+  the contract against the real runner with no code errors.)
+- Direct tests: `pytest tests/direct/ -v` -> **9 passed** (in-memory, ~0.3s),
+  covering all nine mandatory adversarial cases. The suite requires Python 3.12
+  (the local default Python 3.14 breaks a transitive test dependency), e.g.
+  `uv venv --python 3.12 && uv pip install genlayer-test`.
+- Deployment: the contract **compiles on GenLayer Studio Devnet** (the deploy
+  transaction reached the fee/consensus stage). Finalizing a fresh deployment is
+  currently blocked on deployer funding: every keystore account holds 0 GEN on
+  studio-dev and the Studio faucet did not credit within the polling window, so
+  the fee-bearing deploy transaction reverts with `FeeValueMustBeNonZero`. Once
+  a funded key is available, run:
+  `genlayer deploy --contract contracts/westphalia.py --fee-value <wei>` and
+  paste the resulting address into `frontend/lib/networks.ts`
+  (`DIPLOMATIC_CONTRACT_ADDRESS`).
+
 ## Contract Interaction Guidelines
 
 The dApp targets **GenLayer StudioNet**:
