@@ -3,35 +3,29 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import type { Sovereignty, Treaty } from "@/lib/types";
+import type { Treaty } from "@/lib/types";
+import type { IslandLayout } from "@/lib/world";
 import { KIND_COLOR } from "@/lib/board";
-import { TILE, islandForSovereignty, islandTopY } from "@/lib/world";
-
-function citadelTop(s: Sovereignty): THREE.Vector3 {
-  const isl = islandForSovereignty(s.id);
-  if (!isl) return new THREE.Vector3(0, 4, 0);
-  return new THREE.Vector3(
-    isl.center[0] * TILE,
-    islandTopY(isl) + 2.55,
-    isl.center[1] * TILE
-  );
-}
+import { TILE, islandTopY } from "@/lib/world";
 
 function Beam({
   treaty,
   a,
   b,
-  active,
+  color,
+  radius,
+  opacity,
   onSelect,
 }: {
   treaty: Treaty;
   a: THREE.Vector3;
   b: THREE.Vector3;
-  active: boolean;
+  color: string;
+  radius: number;
+  opacity: number;
   onSelect: (id: string) => void;
 }) {
   const particles = useRef<THREE.Group>(null);
-  const color = KIND_COLOR[treaty.kind] ?? "#22d3ee";
 
   const curve = useMemo(() => {
     const mid = a.clone().add(b).multiplyScalar(0.5);
@@ -44,73 +38,96 @@ function Beam({
     const t = state.clock.elapsedTime;
     particles.current.children.forEach((child, i) => {
       const phase = (t * 0.35 + i / particles.current!.children.length) % 1;
-      const p = curve.getPoint(phase);
-      child.position.copy(p);
+      child.position.copy(curve.getPoint(phase));
     });
   });
 
   return (
     <group onClick={(e) => { e.stopPropagation(); onSelect(treaty.id); }}>
       <mesh>
-        <tubeGeometry args={[curve, 40, active ? 0.055 : 0.03, 8, false]} />
+        <tubeGeometry args={[curve, 40, radius, 8, false]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={active ? 2.4 : 1.4}
+          emissiveIntensity={2.2}
           transparent
-          opacity={0.9}
+          opacity={opacity}
+          depthWrite={false}
         />
       </mesh>
-      <group ref={particles}>
-        {Array.from({ length: 4 }).map((_, i) => (
-          <mesh key={i}>
-            <sphereGeometry args={[0.08, 8, 8]} />
-            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} />
-          </mesh>
-        ))}
-      </group>
+      {opacity > 0.4 && (
+        <group ref={particles}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <mesh key={i}>
+              <sphereGeometry args={[0.08, 8, 8]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} transparent opacity={opacity} />
+            </mesh>
+          ))}
+        </group>
+      )}
     </group>
   );
 }
 
 interface Props {
   treaties: Treaty[];
-  sovereignties: Sovereignty[];
+  layouts: IslandLayout[];
+  focusId: string | null; // hovered or selected enclave
   selectedTreaty: string | null;
   onSelectTreaty: (id: string) => void;
 }
 
+// Focused treaty rendering: by default show active alliances and active
+// dispute arcs; when an enclave is focused, dim links not connected to it.
 export default function TreatyLinks({
   treaties,
-  sovereignties,
+  layouts,
+  focusId,
   selectedTreaty,
   onSelectTreaty,
 }: Props) {
   const byId = useMemo(() => {
-    const m = new Map<string, Sovereignty>();
-    for (const s of sovereignties) m.set(s.id, s);
+    const m = new Map<string, IslandLayout>();
+    for (const l of layouts) m.set(l.id, l);
     return m;
-  }, [sovereignties]);
+  }, [layouts]);
+
+  const top = (l: IslandLayout) =>
+    new THREE.Vector3(l.center[0] * TILE, islandTopY(l.floatY) + 2.55, l.center[1] * TILE);
 
   return (
     <group>
-      {treaties
-        .filter((t) => t.status === "active")
-        .map((t) => {
-          const sa = byId.get(t.parties[0]);
-          const sb = byId.get(t.parties[1]);
-          if (!sa || !sb) return null;
-          return (
-            <Beam
-              key={t.id}
-              treaty={t}
-              a={citadelTop(sa)}
-              b={citadelTop(sb)}
-              active={selectedTreaty === t.id}
-              onSelect={onSelectTreaty}
-            />
-          );
-        })}
+      {treaties.map((t) => {
+        if (t.status === "resolved") return null; // only alliances + disputes
+        const la = byId.get(t.parties[0]);
+        const lb = byId.get(t.parties[1]);
+        if (!la || !lb) return null;
+
+        const isDispute = t.status === "pending" || t.status === "breached";
+        const baseColor = isDispute
+          ? t.status === "breached"
+            ? "#ef4444"
+            : "#f59e0b"
+          : KIND_COLOR[t.kind] ?? "#22d3ee";
+
+        const connected = !focusId || t.parties.includes(focusId);
+        const selected = t.id === selectedTreaty;
+        const opacity = connected ? 0.92 : 0.1;
+        const radius = selected ? 0.06 : isDispute ? 0.03 : 0.04;
+
+        return (
+          <Beam
+            key={t.id}
+            treaty={t}
+            a={top(la)}
+            b={top(lb)}
+            color={baseColor}
+            radius={connected ? radius + (selected ? 0.02 : 0) : 0.02}
+            opacity={opacity}
+            onSelect={onSelectTreaty}
+          />
+        );
+      })}
     </group>
   );
 }

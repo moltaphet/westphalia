@@ -3,7 +3,15 @@
 
 export type ReputationTier = "Sovereign" | "Trusted" | "Neutral" | "Watched" | "Rogue";
 
-export type SovereigntyStatus = "stable" | "allied" | "disputed" | "slashed";
+// Dynamic agent enclave status used across the scalable archipelago.
+export type EnclaveStatus = "Active" | "Contested" | "Slashed";
+
+// Sovereign agent archetypes selectable when founding a new realm.
+export type Archetype =
+  | "Autonomous Arbiter"
+  | "Liquidity Nexus"
+  | "Oracle Collective"
+  | "Defense Vanguard";
 
 export type TreatyKind = "non-aggression" | "trade" | "data-sharing";
 
@@ -28,28 +36,37 @@ export interface SlashingRecord {
   amountGen: number;
 }
 
-export interface Sovereignty {
+// Per-enclave biome, driving procedural terrain palette and elevation.
+export interface BiomeTheme {
+  base: string; // primary voxel tint
+  ridge: string; // ridge / cliff tint
+  accent: string; // emissive rune + citadel accent
+  elevationSeed: number; // deterministic terrain seed
+}
+
+// A dynamic, state-driven agent sovereignty. Enclaves are created at runtime
+// (seed set plus on-demand "found realm" deployments) and positioned by the
+// orbital layout algorithm around the central Geneva core.
+export interface AgentEnclave {
   id: string;
   name: string;
-  agentAddress: string;
-  // Grid center of the citadel.
-  center: { col: number; row: number };
-  // Base terrain tint (hex), independent of status overlays.
-  color: string;
-  stakeGen: number;
+  archetype: Archetype;
+  address: string;
+  collateral: number; // sovereign collateral (GEN)
   reputation: number; // 0 - 100
   tier: ReputationTier;
-  status: SovereigntyStatus;
-  lockedEscrowGen: number;
-  // Ids of treaties this sovereignty participates in.
-  treatyIds: string[];
-  summary: string;
+  biomeTheme: BiomeTheme;
+  status: EnclaveStatus;
+  treaties: string[]; // ids of treaties this enclave participates in
   // Rich telemetry surfaced in the agent dossier.
+  lockedEscrowGen: number;
+  hazardPct: number; // 0 - 100 sector hazard level
+  yieldApr: number; // escrow yield parameter (percent)
   complianceScore: number; // 0 - 100 treaty compliance
   activeEnclaves: number;
   slashingHistory: SlashingRecord[];
-  hazardPct: number; // 0 - 100 sector hazard level
-  yieldApr: number; // escrow yield parameter (percent)
+  summary: string;
+  governance: string; // natural-language governance philosophy
 }
 
 export interface Treaty {
@@ -75,7 +92,8 @@ export type LedgerEventKind =
   | "dispute-opened"
   | "consensus-verdict"
   | "escrow-released"
-  | "territory-slashed";
+  | "territory-slashed"
+  | "realm-founded";
 
 export type ValidatorVote = "BREACH" | "COMPLIANT" | "ABSTAIN";
 
@@ -135,7 +153,7 @@ export interface PipelineState {
 export interface ProtocolState {
   stabilityIndex: number; // 0 - 100
   totalEscrowGen: number;
-  sovereignties: Sovereignty[];
+  enclaves: AgentEnclave[];
   treaties: Treaty[];
   ledger: LedgerEvent[];
 }

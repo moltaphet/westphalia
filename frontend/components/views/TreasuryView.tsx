@@ -3,27 +3,26 @@
 import { useMemo } from "react";
 import { Banknote, Coins, HandCoins, TrendingUp, Vault } from "lucide-react";
 import type { ProtocolState } from "@/lib/types";
-import type { ExperienceApi } from "../Experience";
 import { STATUS_COLOR } from "@/lib/board";
 
 export default function TreasuryView({
   state,
-  api,
+  onClaim,
 }: {
   state: ProtocolState;
-  api: ExperienceApi;
+  onClaim: (treatyId: string) => void;
 }) {
   const treasury = useMemo(
     () => state.treaties.filter((t) => t.status === "breached").reduce((s, t) => s + t.bondGen, 0),
     [state.treaties]
   );
   const avgYield = useMemo(() => {
-    const arr = state.sovereignties.map((s) => s.yieldApr);
+    const arr = state.enclaves.map((s) => s.yieldApr);
     return arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
-  }, [state.sovereignties]);
+  }, [state.enclaves]);
   const maxEscrow = useMemo(
-    () => Math.max(...state.sovereignties.map((s) => s.lockedEscrowGen), 1),
-    [state.sovereignties]
+    () => Math.max(...state.enclaves.map((s) => s.lockedEscrowGen), 1),
+    [state.enclaves]
   );
 
   const claimable = state.treaties.filter((t) => t.status === "active" || t.status === "resolved");
@@ -62,7 +61,7 @@ export default function TreasuryView({
             </span>
           </div>
           <div className="flex flex-col gap-3 p-4">
-            {state.sovereignties.map((s) => {
+            {state.enclaves.map((s) => {
               const color = STATUS_COLOR[s.status];
               const pct = (s.lockedEscrowGen / maxEscrow) * 100;
               return (
@@ -82,7 +81,7 @@ export default function TreasuryView({
                   <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
                     <span>yield {s.yieldApr.toFixed(1)}% APR</span>
                     <span>hazard {s.hazardPct}%</span>
-                    <span>stake {s.stakeGen.toLocaleString("en-US")} GEN</span>
+                    <span>stake {s.collateral.toLocaleString("en-US")} GEN</span>
                   </div>
                 </div>
               );
@@ -105,7 +104,7 @@ export default function TreasuryView({
             </p>
             {claimable.map((t) => {
               const names = t.parties
-                .map((p) => state.sovereignties.find((s) => s.id === p)?.name ?? p)
+                .map((p) => state.enclaves.find((s) => s.id === p)?.name ?? p)
                 .join("  x  ");
               return (
                 <div
@@ -123,7 +122,7 @@ export default function TreasuryView({
                       {t.bondGen.toLocaleString("en-US")} GEN
                     </span>
                     <button
-                      onClick={() => void api.claimEscrow(t.id)}
+                      onClick={() => onClaim(t.id)}
                       className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-[10px] font-bold tracking-widest text-cyan-200 hover:bg-cyan-500/25"
                     >
                       CLAIM

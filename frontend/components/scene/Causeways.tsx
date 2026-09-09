@@ -3,15 +3,11 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { ISLANDS, TILE, islandById, islandTopY } from "@/lib/world";
-
-function endpoint(id: string): THREE.Vector3 {
-  const isl = islandById(id)!;
-  return new THREE.Vector3(isl.center[0] * TILE, islandTopY(isl) - 0.4, isl.center[1] * TILE);
-}
+import type { IslandLayout } from "@/lib/world";
+import { HUB, TILE, islandTopY } from "@/lib/world";
 
 // A single causeway between the Geneva hub and an island. Intact links carry
-// kinetic data particles; the rogue containment link is severed with a gap.
+// kinetic data particles; slashed enclaves have a severed link with a gap.
 function Causeway({
   from,
   to,
@@ -36,12 +32,8 @@ function Causeway({
     const t = state.clock.elapsedTime;
     particles.current.children.forEach((child, i) => {
       let phase = (t * 0.28 + i / particles.current!.children.length) % 1;
-      // Data packets vanish at the break on a severed link.
       if (broken && phase > 0.42 && phase < 0.58) phase = 0.42;
-      const p = curve.getPoint(phase);
-      child.position.copy(p);
-      const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
-      mat.opacity = broken && phase >= 0.42 && phase <= 0.42 ? 0.2 : 1;
+      child.position.copy(curve.getPoint(phase));
     });
   });
 
@@ -75,7 +67,6 @@ function Causeway({
         );
       })}
 
-      {/* Broken-link spark cluster at the severed midpoint. */}
       {broken && (
         <mesh position={curve.getPoint(0.5)}>
           <icosahedronGeometry args={[0.18, 0]} />
@@ -87,7 +78,7 @@ function Causeway({
         {Array.from({ length: broken ? 3 : 5 }).map((_, i) => (
           <mesh key={i}>
             <sphereGeometry args={[0.07, 8, 8]} />
-            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} transparent />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={3} />
           </mesh>
         ))}
       </group>
@@ -95,17 +86,17 @@ function Causeway({
   );
 }
 
-export default function Causeways() {
-  const hub = endpoint("central");
+export default function Causeways({ layouts }: { layouts: IslandLayout[] }) {
+  const hub = new THREE.Vector3(HUB.center[0] * TILE, islandTopY(HUB.floatY) - 0.4, HUB.center[1] * TILE);
   return (
     <group>
-      {ISLANDS.filter((i) => i.id !== "central").map((isl) => (
+      {layouts.map((l) => (
         <Causeway
-          key={isl.id}
+          key={l.id}
           from={hub}
-          to={endpoint(isl.id)}
-          color={isl.broken ? "#ef4444" : isl.palette.accent}
-          broken={!!isl.broken}
+          to={new THREE.Vector3(l.center[0] * TILE, islandTopY(l.floatY) - 0.4, l.center[1] * TILE)}
+          color={l.broken ? "#ef4444" : l.palette.accent}
+          broken={l.broken}
         />
       ))}
     </group>

@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
-import type { ExperienceApi } from "./Experience";
+import type { PipelineState } from "@/lib/types";
+import type { TxReceipt } from "@/lib/contract";
 
 // Multi-step tactical progress bar for the transaction pipeline. Rendered
 // globally so it appears regardless of the active workspace view.
-function TxPipelineOverlay({ api }: { api: ExperienceApi }) {
-  const p = api.pipeline;
+function TxPipelineOverlay({ pipeline: p }: { pipeline: PipelineState | null }) {
   if (!p) return null;
   return (
     <div className="pointer-events-auto absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
@@ -77,17 +77,17 @@ function TxPipelineOverlay({ api }: { api: ExperienceApi }) {
   );
 }
 
-function Toast({ api }: { api: ExperienceApi }) {
+function Toast({ receipt }: { receipt: TxReceipt | null }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    if (!api.lastReceipt) return;
+    if (!receipt) return;
     setVisible(true);
     const id = setTimeout(() => setVisible(false), 5200);
     return () => clearTimeout(id);
-  }, [api.lastReceipt]);
+  }, [receipt]);
 
-  if (!visible || !api.lastReceipt) return null;
-  const r = api.lastReceipt;
+  if (!visible || !receipt) return null;
+  const r = receipt;
   return (
     <div className="pointer-events-auto absolute bottom-6 left-1/2 z-40 -translate-x-1/2">
       <div className="flex items-center gap-3 rounded-md border border-cyan-500/40 bg-slate-900/95 px-4 py-3 shadow-hud">
@@ -107,11 +107,17 @@ function Toast({ api }: { api: ExperienceApi }) {
   );
 }
 
-export default function GlobalFeedback({ api }: { api: ExperienceApi }) {
+export default function GlobalFeedback({
+  pipeline,
+  lastReceipt,
+}: {
+  pipeline: PipelineState | null;
+  lastReceipt: TxReceipt | null;
+}) {
   return (
     <div className="pointer-events-none absolute inset-0 z-40 font-mono">
-      <TxPipelineOverlay api={api} />
-      <Toast api={api} />
+      <TxPipelineOverlay pipeline={pipeline} />
+      <Toast receipt={lastReceipt} />
     </div>
   );
 }

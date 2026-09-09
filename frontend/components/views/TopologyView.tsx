@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Share2 } from "lucide-react";
 import type { ProtocolState, Treaty } from "@/lib/types";
 import { KIND_COLOR, STATUS_COLOR } from "@/lib/board";
+import { orbitSlot } from "@/lib/world";
 
 interface Props {
   state: ProtocolState;
@@ -13,18 +14,9 @@ interface Props {
   onSelectTreaty: (id: string | null) => void;
 }
 
-// Fixed 2D layout mirroring the archipelago geography.
-const NODE_POS: Record<string, [number, number]> = {
-  central: [400, 300],
-  alpha: [150, 300],
-  vanguard: [400, 100],
-  enclave: [400, 500],
-  bastion: [650, 300],
-};
-
-function statusColorFor(status: string) {
-  return STATUS_COLOR[status as keyof typeof STATUS_COLOR] ?? "#64748b";
-}
+const K = 5.0; // world-units -> svg-units scale
+const CX = 400;
+const CY = 300;
 
 export default function TopologyView({
   state,
@@ -33,14 +25,25 @@ export default function TopologyView({
   onSelectZone,
   onSelectTreaty,
 }: Props) {
+  // Project each enclave's orbital slot into 2D svg space.
+  const pos = useMemo(() => {
+    const m = new Map<string, [number, number]>();
+    m.set("central", [CX, CY]);
+    state.enclaves.forEach((e, i) => {
+      const s = orbitSlot(i);
+      m.set(e.id, [CX + s.x * K, CY + s.z * K]);
+    });
+    return m;
+  }, [state.enclaves]);
+
   const maxBond = useMemo(
     () => Math.max(...state.treaties.map((t) => t.bondGen), 1),
     [state.treaties]
   );
 
   const edge = (t: Treaty) => {
-    const a = NODE_POS[t.parties[0]] ?? NODE_POS.central;
-    const b = NODE_POS[t.parties[1]] ?? NODE_POS.central;
+    const a = pos.get(t.parties[0]) ?? [CX, CY];
+    const b = pos.get(t.parties[1]) ?? [CX, CY];
     const width = 1.5 + (t.bondGen / maxBond) * 6;
     const color = KIND_COLOR[t.kind] ?? "#22d3ee";
     const disputed = t.status === "pending" || t.status === "breached";
@@ -50,7 +53,6 @@ export default function TopologyView({
 
   return (
     <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[132px] font-mono">
-      {/* Node graph */}
       <div className="flex min-h-0 flex-1 flex-col rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Share2 size={15} className="text-cyan-400" />
@@ -63,49 +65,50 @@ export default function TopologyView({
         </div>
         <div className="min-h-0 flex-1 p-2">
           <svg viewBox="0 0 800 600" className="h-full w-full">
-            {/* edges */}
             {state.treaties.map((t) => {
               const { a, b, width, strokeColor, animated } = edge(t);
               const active = t.id === selectedTreaty;
               return (
-                <g key={t.id} onClick={() => onSelectTreaty(t.id)} style={{ cursor: "pointer" }}>
-                  <line
-                    x1={a[0]}
-                    y1={a[1]}
-                    x2={b[0]}
-                    y2={b[1]}
-                    stroke={strokeColor}
-                    strokeWidth={active ? width + 2 : width}
-                    strokeOpacity={active ? 1 : 0.7}
-                    className={animated ? "flow-dash" : undefined}
-                  />
-                </g>
+                <line
+                  key={t.id}
+                  x1={a[0]}
+                  y1={a[1]}
+                  x2={b[0]}
+                  y2={b[1]}
+                  stroke={strokeColor}
+                  strokeWidth={active ? width + 2 : width}
+                  strokeOpacity={active ? 1 : 0.7}
+                  className={animated ? "flow-dash" : undefined}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => onSelectTreaty(t.id)}
+                />
               );
             })}
 
-            {/* nodes */}
-            {Object.entries(NODE_POS).map(([id, [x, y]]) => {
-              const sov = state.sovereignties.find((s) => s.id === id);
-              const isCentral = id === "central";
-              const color = isCentral ? "#22d3ee" : statusColorFor(sov?.status ?? "stable");
-              const active = id === selectedZone;
-              const r = isCentral ? 30 : 26;
+            {/* central hub */}
+            <g onClick={() => onSelectZone(null)} style={{ cursor: "pointer" }}>
+              <circle cx={CX} cy={CY} r={26} fill="#22d3ee22" stroke="#22d3ee" strokeWidth={1.5} />
+              <circle cx={CX} cy={CY} r={6} fill="#22d3ee" />
+              <text x={CX} y={CY + 42} textAnchor="middle" fill="#cbd5e1" fontSize={12} fontFamily="ui-monospace, monospace">
+                GENEVA HUB
+              </text>
+            </g>
+
+            {state.enclaves.map((e) => {
+              const [x, y] = pos.get(e.id) ?? [CX, CY];
+              const color = STATUS_COLOR[e.status];
+              const active = e.id === selectedZone;
+              const r = 24;
               return (
-                <g
-                  key={id}
-                  onClick={() => onSelectZone(isCentral ? null : id)}
-                  style={{ cursor: "pointer" }}
-                >
+                <g key={e.id} onClick={() => onSelectZone(e.id)} style={{ cursor: "pointer" }}>
                   <circle cx={x} cy={y} r={r + (active ? 6 : 0)} fill={`${color}22`} stroke={color} strokeWidth={active ? 3 : 1.5} />
                   <circle cx={x} cy={y} r={6} fill={color} />
-                  <text x={x} y={y + r + 16} textAnchor="middle" fill="#cbd5e1" fontSize={12} fontFamily="ui-monospace, monospace">
-                    {isCentral ? "GENEVA HUB" : sov?.name ?? id}
+                  <text x={x} y={y + r + 14} textAnchor="middle" fill="#cbd5e1" fontSize={11} fontFamily="ui-monospace, monospace">
+                    {e.name}
                   </text>
-                  {sov && (
-                    <text x={x} y={y + r + 30} textAnchor="middle" fill="#64748b" fontSize={10} fontFamily="ui-monospace, monospace">
-                      {sov.stakeGen.toLocaleString("en-US")} GEN staked
-                    </text>
-                  )}
+                  <text x={x} y={y + r + 27} textAnchor="middle" fill="#64748b" fontSize={9} fontFamily="ui-monospace, monospace">
+                    {e.collateral.toLocaleString("en-US")} GEN
+                  </text>
                 </g>
               );
             })}
@@ -113,7 +116,6 @@ export default function TopologyView({
         </div>
       </div>
 
-      {/* Matrix + flows */}
       <div className="hud-scroll w-[320px] shrink-0 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 p-4 shadow-hud backdrop-blur-md">
         <div className="mb-2 text-[11px] font-bold tracking-[0.2em] text-slate-200">
           NON-AGGRESSION MATRIX
@@ -127,7 +129,7 @@ export default function TopologyView({
           {state.treaties.map((t) => {
             const color = KIND_COLOR[t.kind] ?? "#22d3ee";
             const names = t.parties
-              .map((p) => state.sovereignties.find((s) => s.id === p)?.name ?? p)
+              .map((p) => state.enclaves.find((s) => s.id === p)?.name ?? p)
               .join(" -> ");
             return (
               <button
@@ -159,14 +161,12 @@ export default function TopologyView({
 }
 
 function NonAggressionMatrix({ state }: { state: ProtocolState }) {
-  const ids = state.sovereignties.map((s) => s.id);
-  const label = (id: string) => state.sovereignties.find((s) => s.id === id)?.name.split(" ")[0] ?? id;
+  const ids = state.enclaves.map((s) => s.id);
+  const label = (id: string) => state.enclaves.find((s) => s.id === id)?.name.split(" ")[0] ?? id;
 
   const relation = (a: string, b: string): { txt: string; color: string } => {
     if (a === b) return { txt: "-", color: "#334155" };
-    const t = state.treaties.find(
-      (tt) => tt.parties.includes(a) && tt.parties.includes(b)
-    );
+    const t = state.treaties.find((tt) => tt.parties.includes(a) && tt.parties.includes(b));
     if (!t) return { txt: ".", color: "#475569" };
     if (t.status === "breached") return { txt: "X", color: "#ef4444" };
     if (t.status === "pending") return { txt: "?", color: "#f59e0b" };
@@ -174,7 +174,7 @@ function NonAggressionMatrix({ state }: { state: ProtocolState }) {
   };
 
   return (
-    <div className="overflow-hidden rounded border border-slate-700/60">
+    <div className="hud-scroll overflow-auto rounded border border-slate-700/60">
       <table className="w-full border-collapse text-center text-[10px]">
         <thead>
           <tr className="bg-slate-800/60 text-slate-400">

@@ -6,29 +6,22 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera, Stars } from "@react-three/drei";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import type { ProtocolState } from "@/lib/types";
-import type { WorldTile } from "@/lib/world";
-import { TILE, islandForSovereignty, islandTopY } from "@/lib/world";
-import Archipelago from "./scene/Archipelago";
-import Citadel from "./scene/Citadel";
+import { HUB, TILE, buildLayouts, islandTopY } from "@/lib/world";
+import ProceduralIsland from "./ProceduralIsland";
 import TreatyLinks from "./scene/TreatyLinks";
-import DisputeDome from "./scene/DisputeDome";
-import ContainmentGrid from "./scene/ContainmentGrid";
 import CentralPlatform from "./scene/CentralPlatform";
 import ParticleField from "./scene/ParticleField";
 import Causeways from "./scene/Causeways";
 import RadarSweep from "./scene/RadarSweep";
-import IslandLabels from "./scene/IslandLabels";
-import { islandById } from "@/lib/world";
 
 interface Props {
   state: ProtocolState;
-  tiles: WorldTile[];
-  hoveredZone: string | null;
-  selectedZone: string | null;
-  focusZone: string | null;
+  hoveredId: string | null;
+  selectedId: string | null;
+  focusId: string | null;
   selectedTreaty: string | null;
-  onHoverZone: (id: string | null) => void;
-  onSelectZone: (id: string | null) => void;
+  onHover: (id: string | null) => void;
+  onSelect: (id: string | null) => void;
   onSelectTreaty: (id: string) => void;
 }
 
@@ -42,7 +35,7 @@ function CursorManager({ hovered }: { hovered: boolean }) {
   return null;
 }
 
-// Smoothly re-frames the orbit target onto the selected island / sector.
+// Smoothly re-frames the orbit target onto the focused island / sector.
 function CameraRig({ focus }: { focus: [number, number, number] }) {
   const controls = useThree((s) => s.controls) as
     | { target: THREE.Vector3; update: () => void }
@@ -63,128 +56,104 @@ function CameraRig({ focus }: { focus: [number, number, number] }) {
 
 export default function DiplomaticBoard({
   state,
-  tiles,
-  hoveredZone,
-  selectedZone,
-  focusZone,
+  hoveredId,
+  selectedId,
+  focusId,
   selectedTreaty,
-  onHoverZone,
-  onSelectZone,
+  onHover,
+  onSelect,
   onSelectTreaty,
 }: Props) {
+  const layouts = useMemo(() => buildLayouts(state.enclaves), [state.enclaves]);
+  const layoutMap = useMemo(() => {
+    const m = new Map(layouts.map((l) => [l.id, l] as const));
+    return m;
+  }, [layouts]);
+
   const focus = useMemo<[number, number, number]>(() => {
-    if (focusZone) {
-      const isl = islandForSovereignty(focusZone);
-      if (isl) return [isl.center[0] * TILE, islandTopY(isl), isl.center[1] * TILE];
+    if (focusId) {
+      const l = layoutMap.get(focusId);
+      if (l) return [l.center[0] * TILE, islandTopY(l.floatY), l.center[1] * TILE];
     }
     return [0, 2, 0];
-  }, [focusZone]);
+  }, [focusId, layoutMap]);
+
+  const treatyFocus = hoveredId ?? selectedId;
 
   return (
     <div className="absolute inset-0">
-      <CursorManager hovered={hoveredZone !== null} />
+      <CursorManager hovered={hoveredId !== null} />
       <Canvas shadows dpr={[1, 2]} gl={{ alpha: true, antialias: true }}>
-        <PerspectiveCamera makeDefault position={[52, 44, 52]} fov={32} />
+        <PerspectiveCamera makeDefault position={[56, 48, 56]} fov={32} />
         <OrbitControls
           makeDefault
           enableDamping
           dampingFactor={0.08}
           enablePan
           minDistance={14}
-          maxDistance={120}
+          maxDistance={140}
           minPolarAngle={0.12}
           maxPolarAngle={Math.PI / 2.2}
           target={[0, 2, 0]}
         />
         <CameraRig focus={focus} />
 
-        {/* Lighting rig */}
         <ambientLight intensity={0.5} />
         <hemisphereLight args={["#38bdf8", "#0f172a", 0.5]} />
         <directionalLight
-          position={[24, 34, 16]}
+          position={[30, 40, 20]}
           intensity={1.15}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
-          shadow-camera-far={120}
-          shadow-camera-left={-50}
-          shadow-camera-right={50}
-          shadow-camera-top={50}
-          shadow-camera-bottom={-50}
+          shadow-camera-far={160}
+          shadow-camera-left={-70}
+          shadow-camera-right={70}
+          shadow-camera-top={70}
+          shadow-camera-bottom={-70}
         />
-        <pointLight position={[-30, 14, -24]} intensity={0.6} color="#a78bfa" />
-        <pointLight position={[30, 12, 24]} intensity={0.5} color="#22d3ee" />
+        <pointLight position={[-40, 18, -32]} intensity={0.6} color="#a78bfa" />
+        <pointLight position={[40, 16, 32]} intensity={0.5} color="#22d3ee" />
 
         <Suspense fallback={null}>
-          <Stars radius={120} depth={60} count={2200} factor={3} saturation={0} fade speed={0.5} />
-          <ParticleField count={520} />
+          <Stars radius={140} depth={70} count={2600} factor={3} saturation={0} fade speed={0.5} />
+          <ParticleField count={620} />
           <RadarSweep />
 
-          <Archipelago
-            tiles={tiles}
-            sovereignties={state.sovereignties}
-            hoveredZone={hoveredZone}
-            selectedZone={selectedZone}
-            onHoverZone={onHoverZone}
-            onSelectZone={onSelectZone}
-          />
+          <Causeways layouts={layouts} />
 
-          <Causeways />
-
-          {state.sovereignties.map((s) => {
-            const isl = islandForSovereignty(s.id);
-            if (!isl) return null;
-            const pos: [number, number] = [isl.center[0] * TILE, isl.center[1] * TILE];
-            const baseY = islandTopY(isl);
+          {state.enclaves.map((e) => {
+            const layout = layoutMap.get(e.id);
+            if (!layout) return null;
             return (
-              <group key={s.id}>
-                <Citadel
-                  sovereignty={s}
-                  position={pos}
-                  baseY={baseY}
-                  active={s.id === hoveredZone || s.id === selectedZone}
-                  onHover={onHoverZone}
-                  onSelect={onSelectZone}
-                />
-                {s.status === "disputed" && (
-                  <DisputeDome sovereignty={s} position={pos} baseY={baseY} />
-                )}
-                {s.status === "slashed" && (
-                  <ContainmentGrid position={pos} baseY={baseY} />
-                )}
-              </group>
+              <ProceduralIsland
+                key={e.id}
+                enclave={e}
+                layout={layout}
+                active={e.id === hoveredId || e.id === selectedId}
+                onHover={onHover}
+                onSelect={onSelect}
+              />
             );
           })}
 
           <TreatyLinks
             treaties={state.treaties}
-            sovereignties={state.sovereignties}
+            layouts={layouts}
+            focusId={treatyFocus}
             selectedTreaty={selectedTreaty}
             onSelectTreaty={onSelectTreaty}
           />
 
-          <CentralPlatform
-            totalEscrowGen={state.totalEscrowGen}
-            baseY={islandById("central")?.floatY ?? 0}
-          />
+          <CentralPlatform totalEscrowGen={state.totalEscrowGen} baseY={HUB.floatY} />
 
-          <IslandLabels sovereignties={state.sovereignties} />
-
-          {/* Ground shadow catcher */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.6, 0]} receiveShadow>
-            <planeGeometry args={[160, 160]} />
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.8, 0]} receiveShadow>
+            <planeGeometry args={[200, 200]} />
             <shadowMaterial transparent opacity={0.3} />
           </mesh>
 
-          {/* Cyber bloom: makes every emissive beam, ring, and core glow. */}
           <EffectComposer>
-            <Bloom
-              luminanceThreshold={0.2}
-              intensity={1.5}
-              luminanceSmoothing={0.9}
-              mipmapBlur
-            />
+            <Bloom luminanceThreshold={0.2} intensity={1.5} luminanceSmoothing={0.9} mipmapBlur />
           </EffectComposer>
         </Suspense>
       </Canvas>

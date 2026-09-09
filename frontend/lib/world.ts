@@ -1,157 +1,145 @@
-import type { Biome } from "./types";
+import type { AgentEnclave, BiomeTheme } from "./types";
 import { VOXEL_H } from "./board";
 import { fbm } from "./noise";
 
-// World-space layout for the multi-island archipelago. Each island is a
-// self-contained floating voxel continent placed around the neutral hub.
+// Dynamic archipelago geometry. Islands are no longer hardcoded: their world
+// coordinates are derived from an enclave's index via a concentric-ring
+// orbital algorithm around the central Geneva core.
 
 export const TILE = 1;
-export const WORLD_SEED = 20260909;
+export const WORLD_EXTENT = 54; // outer bound, sizes radar + camera limits
 
-export interface IslandPalette {
-  base: string;
-  ridge: string;
-  accent: string;
+// The neutral Geneva hub at the center of the archipelago.
+export const HUB = { center: [0, 0] as [number, number], floatY: 1.4, radius: 4 };
+
+// Deterministic 0..1 hash for organic, stable pseudo-random placement.
+function pseudo(n: number): number {
+  let h = (n | 0) ^ 0x9e3779b9;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 0xffffffff;
 }
 
-export interface Island {
-  id: string;
+export interface OrbitSlot {
+  ring: number;
+  radius: number;
+  angle: number;
+  x: number;
+  z: number;
+  floatY: number;
+}
+
+// Concentric ring placement:
+//   Ring 1 (radius 18-24): enclaves 1-4
+//   Ring 2 (radius 30-36): enclaves 5-10
+//   Ring 3 (radius 42-50): enclaves 11+
+export function orbitSlot(index: number): OrbitSlot {
+  let ring: number;
+  let capacity: number;
+  let radius: number;
+  let startIndex: number;
+
+  if (index < 4) {
+    ring = 1;
+    capacity = 4;
+    radius = 21;
+    startIndex = 0;
+  } else if (index < 10) {
+    ring = 2;
+    capacity = 6;
+    radius = 33;
+    startIndex = 4;
+  } else {
+    ring = 3;
+    capacity = 8;
+    radius = 46;
+    startIndex = 10;
+  }
+
+  const local = index - startIndex;
+  const base = (2 * Math.PI * (local % capacity)) / capacity;
+  // Subtle pseudo-random angular + radial offset for organic layout.
+  const angle = base + (pseudo(index) * 2 - 1) * (Math.PI / capacity) * 0.35;
+  const r = radius + (pseudo(index + 99) * 2 - 1) * 2;
+  const floatY = (pseudo(index + 7) * 2 - 1) * 0.8;
+
+  return {
+    ring,
+    radius: r,
+    angle,
+    x: Math.cos(angle) * r,
+    z: Math.sin(angle) * r,
+    floatY,
+  };
+}
+
+export interface IslandLayout {
+  id: string; // enclave id
   name: string;
-  subtitle: string;
-  sovereigntyId: string | null; // null for the neutral Geneva hub
-  center: [number, number]; // world (x, z)
+  center: [number, number];
   radius: number; // tiles
-  floatY: number; // vertical hover offset
-  palette: IslandPalette;
-  broken?: boolean; // severed causeway (rogue containment)
+  floatY: number;
+  palette: BiomeTheme;
+  broken: boolean; // severed causeway for slashed enclaves
+  ring: number;
 }
 
-export const ISLANDS: Island[] = [
-  {
-    id: "central",
-    name: "The Geneva Platform",
-    subtitle: "Neutral Treaty Hub",
-    sovereigntyId: null,
-    center: [0, 0],
-    radius: 4,
-    floatY: 1.4,
-    palette: { base: "#1e293b", ridge: "#334155", accent: "#22d3ee" },
-  },
-  {
-    id: "alpha",
-    name: "Western Data Federation",
-    subtitle: "Citadel Alpha",
-    sovereigntyId: "alpha",
-    center: [-26, 0],
-    radius: 6,
-    floatY: 0.2,
-    palette: { base: "#0e7490", ridge: "#334155", accent: "#22d3ee" },
-  },
-  {
-    id: "beta",
-    name: "Vanguard Autonomous Nexus",
-    subtitle: "Vanguard Nexus",
-    sovereigntyId: "vanguard",
-    center: [0, -26],
-    radius: 6,
-    floatY: 0.6,
-    palette: { base: "#6d28d9", ridge: "#4c1d95", accent: "#a78bfa" },
-  },
-  {
-    id: "gamma",
-    name: "Sovereign Freeholds",
-    subtitle: "Sovereign Enclave",
-    sovereigntyId: "enclave",
-    center: [0, 26],
-    radius: 6,
-    floatY: -0.2,
-    palette: { base: "#047857", ridge: "#065f46", accent: "#34d399" },
-  },
-  {
-    id: "delta",
-    name: "Rogue Containment Shard",
-    subtitle: "Consensus Bastion",
-    sovereigntyId: "bastion",
-    center: [26, 0],
-    radius: 6,
-    floatY: -0.8,
-    palette: { base: "#1c1917", ridge: "#3f1d1d", accent: "#ef4444" },
-    broken: true,
-  },
-];
-
-export function islandById(id: string): Island | undefined {
-  return ISLANDS.find((i) => i.id === id);
+// Compute island layouts for the current set of enclaves.
+export function buildLayouts(enclaves: AgentEnclave[]): IslandLayout[] {
+  return enclaves.map((e, i) => {
+    const slot = orbitSlot(i);
+    // Outer rings render slightly smaller islands to keep the map readable.
+    const radius = slot.ring === 1 ? 6 : slot.ring === 2 ? 5 : 4;
+    return {
+      id: e.id,
+      name: e.name,
+      center: [slot.x, slot.z],
+      radius,
+      floatY: slot.floatY,
+      palette: e.biomeTheme,
+      broken: e.status === "Slashed",
+      ring: slot.ring,
+    };
+  });
 }
 
-export function islandForSovereignty(sovereigntyId: string): Island | undefined {
-  return ISLANDS.find((i) => i.sovereigntyId === sovereigntyId);
+// Top surface height of the raised central plateau (citadel base height).
+export function islandTopY(floatY: number): number {
+  return floatY + 5 * VOXEL_H;
 }
 
-// World (x, z) of a citadel / hub at the center of its island.
-export function islandCenterWorld(id: string): [number, number] {
-  const isl = islandById(id);
-  return isl ? isl.center : [0, 0];
-}
-
-// Y of the raised central plateau top for an island (citadel base height).
-export function islandTopY(isl: Island): number {
-  return isl.floatY + 5 * VOXEL_H;
-}
-
-export interface WorldTile {
-  wx: number;
-  wz: number;
+export interface IslandTile {
+  dx: number;
+  dz: number;
   height: number;
-  biome: Biome;
-  islandId: string;
-  baseY: number;
+  rune: boolean;
 }
 
-// Generate the voxel terrain for every island as absolute world tiles.
-export function generateWorld(): WorldTile[] {
-  const tiles: WorldTile[] = [];
-  for (const isl of ISLANDS) {
-    for (let dz = -isl.radius; dz <= isl.radius; dz++) {
-      for (let dx = -isl.radius; dx <= isl.radius; dx++) {
-        const dist = Math.hypot(dx, dz);
-        if (dist > isl.radius + 0.35) continue; // rounded continent outline
+// Procedurally generate an island's voxel tiles from its biome seed.
+export function generateIslandTiles(radius: number, seed: number): IslandTile[] {
+  const tiles: IslandTile[] = [];
+  for (let dz = -radius; dz <= radius; dz++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const dist = Math.hypot(dx, dz);
+      if (dist > radius + 0.35) continue;
 
-        const wx = isl.center[0] + dx;
-        const wz = isl.center[1] + dz;
-        const n = fbm(wx * 0.16, wz * 0.16, WORLD_SEED, 4);
+      const n = fbm((dx + 40) * 0.19, (dz + 40) * 0.19, seed, 4);
+      let height = 1 + Math.round(n * 5); // stepped elevation
 
-        let height = 1 + Math.round(n * 4);
-        let biome: Biome = "plain";
+      // Cliff drops toward the coast.
+      if (dist > radius - 1) height = Math.max(1, height - 3);
+      else if (dist > radius - 2) height = Math.max(1, height - 1);
 
-        if (n > 0.72) {
-          biome = "mountain";
-          height = 4 + Math.round((n - 0.72) * 10);
-        }
-        // Coastal shelves taper toward the island edge.
-        if (dist > isl.radius - 1) height = Math.max(1, height - 2);
+      // Raised central plateau for the citadel.
+      if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) height = 5;
 
-        // Raised central plateau hosts the citadel / hub.
-        if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) {
-          biome = "core";
-          height = 5;
-        }
+      // Glowing rune tiles: a sparse deterministic set of emissive markers.
+      const runeNoise = fbm((dx - 12) * 0.33, (dz + 5) * 0.33, seed + 71, 2);
+      const rune = runeNoise > 0.74 && dist < radius - 0.5 && height >= 2;
 
-        // A meandering coolant channel across the larger islands.
-        if (isl.radius >= 6) {
-          const river = fbm(wx * 0.12 + 4.2, wz * 0.12, WORLD_SEED + 91, 2);
-          if (river > 0.47 && river < 0.53 && biome === "plain") {
-            biome = "river";
-            height = 1;
-          }
-        }
-
-        tiles.push({ wx, wz, height, biome, islandId: isl.id, baseY: isl.floatY });
-      }
+      tiles.push({ dx, dz, height, rune });
     }
   }
   return tiles;
 }
-
-// Overall archipelago radius, used to size the radar sweep and camera bounds.
-export const WORLD_EXTENT = 34;

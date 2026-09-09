@@ -3,18 +3,16 @@
 import { useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import type { Sovereignty } from "@/lib/types";
-
 // Pulsing holographic amber dome marking a territory under active
 // GenLayer multi-LLM validator consensus.
 export default function DisputeDome({
-  sovereignty,
   position,
   baseY,
+  nodes = 5,
 }: {
-  sovereignty: Sovereignty;
   position: [number, number];
   baseY: number;
+  nodes?: number;
 }) {
   const dome = useRef<THREE.Mesh>(null);
   const validators = useRef<THREE.Group>(null);
@@ -47,7 +45,7 @@ export default function DisputeDome({
 
       {/* Orbiting validator nodes representing the empaneled LLM validators. */}
       <group ref={validators} position={[0, 2.2, 0]}>
-        {Array.from({ length: sovereignty.treatyIds.length + 3 }).map((_, i, arr) => {
+        {Array.from({ length: nodes }).map((_, i, arr) => {
           const a = (i / arr.length) * Math.PI * 2;
           return (
             <mesh key={i} position={[Math.cos(a) * 2.2, 0, Math.sin(a) * 2.2]}>

@@ -7,6 +7,7 @@ import {
   Gavel,
   HandCoins,
   Radio,
+  Rocket,
   Scale,
   ScrollText,
   Shield,
@@ -14,27 +15,30 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import type { ExperienceApi } from "./Experience";
 import type {
+  AgentEnclave,
   ConsensusAudit,
   LedgerEvent,
   ProtocolState,
   ReputationTier,
-  Sovereignty,
   Treaty,
   TreatyKind,
   ValidatorVote,
 } from "@/lib/types";
 import { auditForEvent, shortAddress } from "@/lib/mockData";
-import { STATUS_COLOR } from "@/lib/board";
+import { STATUS_COLOR, STATUS_LABEL } from "@/lib/board";
 
 interface Props {
   state: ProtocolState;
-  api: ExperienceApi;
-  selectedZone: string | null;
+  selectedId: string | null;
   selectedTreaty: string | null;
-  onSelectZone: (id: string | null) => void;
+  reviewerMode: boolean;
+  connected: boolean;
   onSelectTreaty: (id: string | null) => void;
+  onEnterReviewer: () => void;
+  onPropose: (partnerId: string, kind: TreatyKind, terms: string, bond: number) => void;
+  onDispute: (treatyId: string, evidence: string) => void;
+  onClaim: (treatyId: string) => void;
 }
 
 type ModalKind = "propose" | "dispute" | "claim" | null;
@@ -45,13 +49,6 @@ const TIER_COLOR: Record<ReputationTier, string> = {
   Neutral: "text-slate-200 border-slate-500/50 bg-slate-500/10",
   Watched: "text-amber-300 border-amber-500/50 bg-amber-500/10",
   Rogue: "text-red-300 border-red-500/50 bg-red-500/10",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  stable: "STABLE",
-  allied: "ALLIED",
-  disputed: "IN DISPUTE",
-  slashed: "SANCTIONED",
 };
 
 function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -122,7 +119,7 @@ function TreatyRow({
   active: boolean;
 }) {
   const names = treaty.parties
-    .map((p) => state.sovereignties.find((s) => s.id === p)?.name ?? p)
+    .map((p) => state.enclaves.find((s) => s.id === p)?.name ?? p)
     .join("  x  ");
   const statusColor =
     treaty.status === "active"
@@ -159,17 +156,17 @@ function TreatyRow({
 
 function Dossier({
   state,
-  selectedZone,
+  selectedId,
   selectedTreaty,
   onSelectTreaty,
 }: {
   state: ProtocolState;
-  selectedZone: string | null;
+  selectedId: string | null;
   selectedTreaty: string | null;
   onSelectTreaty: (id: string | null) => void;
 }) {
-  const sov: Sovereignty | null =
-    state.sovereignties.find((s) => s.id === selectedZone) ?? null;
+  const sov: AgentEnclave | null =
+    state.enclaves.find((s) => s.id === selectedId) ?? null;
   const treaty = state.treaties.find((t) => t.id === selectedTreaty) ?? null;
 
   const sovTreaties = useMemo(() => {
@@ -208,14 +205,17 @@ function Dossier({
                     {STATUS_LABEL[sov.status]}
                   </span>
                 </div>
-                <div className="mt-1 flex items-center gap-2">
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span className="rounded border border-slate-700 bg-slate-800/70 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
-                    {shortAddress(sov.agentAddress)}
+                    {shortAddress(sov.address)}
                   </span>
                   <span
                     className={`rounded border px-2 py-0.5 text-[9px] font-bold ${TIER_COLOR[sov.tier]}`}
                   >
                     {sov.tier.toUpperCase()}
+                  </span>
+                  <span className="rounded border border-slate-600/50 bg-slate-800/50 px-2 py-0.5 text-[9px] font-bold tracking-widest text-slate-300">
+                    {sov.archetype.toUpperCase()}
                   </span>
                 </div>
               </div>
@@ -223,7 +223,7 @@ function Dossier({
               <p className="text-[11px] leading-relaxed text-slate-400">{sov.summary}</p>
 
               <div className="grid grid-cols-2 gap-2">
-                <Stat label="STAKE" value={`${sov.stakeGen.toLocaleString("en-US")} GEN`} tone="emerald" />
+                <Stat label="COLLATERAL" value={`${sov.collateral.toLocaleString("en-US")} GEN`} tone="emerald" />
                 <Stat label="LOCKED ESCROW" value={`${sov.lockedEscrowGen.toLocaleString("en-US")} GEN`} tone="cyan" />
                 <Stat label="REPUTATION" value={`${sov.reputation} / 100`} />
                 <Stat label="ACTIVE ENCLAVES" value={`${sov.activeEnclaves}`} />
@@ -333,6 +333,7 @@ const KIND_ICON: Record<LedgerEvent["kind"], React.ReactNode> = {
   "consensus-verdict": <Gavel size={12} className="text-violet-400" />,
   "escrow-released": <HandCoins size={12} className="text-cyan-400" />,
   "territory-slashed": <TriangleAlert size={12} className="text-red-400" />,
+  "realm-founded": <Rocket size={12} className="text-emerald-400" />,
 };
 
 function LedgerFeed({
@@ -627,7 +628,7 @@ function ProposeModal({
   onClose: () => void;
   onSubmit: (partnerId: string, kind: TreatyKind, terms: string, bond: number) => void;
 }) {
-  const partners = state.sovereignties.filter((s) => s.id !== selfId);
+  const partners = state.enclaves.filter((s) => s.id !== selfId);
   const [partner, setPartner] = useState(partners[0]?.id ?? "");
   const [kind, setKind] = useState<TreatyKind>("non-aggression");
   const [terms, setTerms] = useState("Mutual non-aggression with 24h dispute window.");
@@ -754,15 +755,18 @@ function ClaimModal({
 
 export default function HudOverlay({
   state,
-  api,
-  selectedZone,
+  selectedId,
   selectedTreaty,
-  onSelectZone,
+  reviewerMode,
+  connected,
   onSelectTreaty,
+  onEnterReviewer,
+  onPropose,
+  onDispute,
+  onClaim,
 }: Props) {
   const [modal, setModal] = useState<ModalKind>(null);
   const [auditEvent, setAuditEvent] = useState<LedgerEvent | null>(null);
-  void onSelectZone;
 
   const disputableTreaties = state.treaties.filter(
     (t) => t.status === "active" || t.status === "pending"
@@ -792,17 +796,17 @@ export default function HudOverlay({
       <LedgerFeed ledger={state.ledger} onSelectEvent={setAuditEvent} />
       <Dossier
         state={state}
-        selectedZone={selectedZone}
+        selectedId={selectedId}
         selectedTreaty={selectedTreaty}
         onSelectTreaty={onSelectTreaty}
       />
       <Legend />
       <ActionBar onAction={setModal} />
 
-      {api.reviewerMode && !api.connected && (
-        <div className="pointer-events-auto absolute right-4 top-32 z-20">
+      {reviewerMode && !connected && (
+        <div className="pointer-events-auto absolute right-4 top-[188px] z-20">
           <button
-            onClick={api.enterReviewerMode}
+            onClick={onEnterReviewer}
             className="flex items-center gap-2 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[10px] font-bold tracking-widest text-amber-300 hover:bg-amber-500/20"
           >
             <Radio size={12} /> REVIEWER MODE
@@ -821,10 +825,10 @@ export default function HudOverlay({
       {modal === "propose" && (
         <ProposeModal
           state={state}
-          selfId={selectedZone}
+          selfId={selectedId}
           onClose={() => setModal(null)}
           onSubmit={(p, k, t, b) => {
-            void api.proposeTreaty(p, k, t, b);
+            onPropose(p, k, t, b);
             setModal(null);
           }}
         />
@@ -834,7 +838,7 @@ export default function HudOverlay({
           treaties={disputableTreaties}
           onClose={() => setModal(null)}
           onSubmit={(id, ev) => {
-            void api.triggerDispute(id, ev);
+            onDispute(id, ev);
             setModal(null);
           }}
         />
@@ -844,7 +848,7 @@ export default function HudOverlay({
           treaties={state.treaties}
           onClose={() => setModal(null)}
           onSubmit={(id) => {
-            void api.claimEscrow(id);
+            onClaim(id);
             setModal(null);
           }}
         />

@@ -28,30 +28,64 @@ frontend/
                           consensus audit modal, action bar (P/D/C hotkeys),
                           and the propose / dispute / claim modals.
     GlobalFeedback.tsx    Cross-view transaction pipeline overlay + toast.
+    ProceduralIsland.tsx  Per-enclave voxel island (InstancedMesh terrain +
+                          rune tiles + keel + citadel + status overlays + label)
+    FoundRealmModal.tsx   Found Sovereignty deployment modal.
+    RealmDirectory.tsx    Collapsible search / quick-jump camera drawer.
     scene/
-      Archipelago.tsx     InstancedMesh voxel islands + floating keels (60fps)
       Citadel.tsx         Data Bastion: server strips, energy core, status rings
-      TreatyLinks.tsx     Animated alliance/trade laser beams with particles
+      TreatyLinks.tsx     Focused alliance/dispute arcs (dim unrelated links)
       Causeways.tsx       Energy causeways + kinetic streams (severed rogue link)
       DisputeDome.tsx     Pulsing amber LLM-arbitration dome + validator ring
       ContainmentGrid.tsx Red containment barrier + warning beacons (slashed)
       CentralPlatform.tsx The Geneva hub: rotating GenLayer consensus core
       RadarSweep.tsx      Rotating tactical radar sweep + range rings
       ParticleField.tsx   Ambient drifting data-dust particles
-      IslandLabels.tsx    Floating island names + sector hazard readouts
     views/
       TopologyView.tsx    2D treaty node graph + non-aggression matrix
       TribunalView.tsx    GenLayer consensus courtroom dashboard
       TreasuryView.tsx    Escrow collateral + pull-pattern withdrawals
   lib/
-    types.ts              Domain model (Sovereignty, Treaty, Audit, View, ...)
+    types.ts              Domain model (AgentEnclave, Treaty, Audit, View, ...)
+    store.ts              Dynamic state hub: enclaves, actions, found-realm
     networks.ts           GenLayer StudioNet RPC + chain configuration
     contract.ts           Mock intelligent-contract ABI + Web3 binding
-    mockData.ts           Realistic on-chain state + consensus audits
-    world.ts              Archipelago islands + procedural world generation
+    mockData.ts           Seed treaties, ledger, and consensus audits
+    world.ts              Orbital layout algorithm + procedural island tiles
     noise.ts              Deterministic value/fBm noise for terrain relief
     board.ts              Shared render constants + status/kind color maps
 ```
+
+### Dynamic scalable archipelago
+
+The archipelago is fully state-driven. Agents are `AgentEnclave[]` held in
+`lib/store.ts` (`useWestphaliaStore`), and island geometry is derived at runtime
+from each enclave's index via a concentric-ring orbital algorithm
+(`lib/world.ts` `orbitSlot`):
+
+- Ring 1 (radius 18-24): enclaves 1-4
+- Ring 2 (radius 30-36): enclaves 5-10
+- Ring 3 (radius 42-50): enclaves 11+
+
+Angle per enclave is `2*pi * (i mod N) / N` with subtle deterministic offsets
+for organic placement. Each island is rendered by
+`components/ProceduralIsland.tsx`, which builds its voxel mesh from the
+enclave's `biomeTheme` (palette + elevation seed) using two `InstancedMesh`
+groups (terrain + glowing rune tiles) so the map holds 60fps with 12+ islands.
+
+**Founding a new realm.** Click `[+ FOUND SOVEREIGNTY]` in the command bar to
+open `components/FoundRealmModal.tsx`. Provide an agent name, a sovereign
+archetype (Autonomous Arbiter, Liquidity Nexus, Oracle Collective, Defense
+Vanguard), initial GEN collateral, and a natural-language governance philosophy
+(parsed by GenLayer validators to auto-evaluate treaties). On submit the store
+runs the multi-step transaction pipeline, instantiates a new voxel island in
+the next orbital slot, and flies the camera to focus on the new realm.
+
+**Navigation.** The Realm Directory (`components/RealmDirectory.tsx`) is a
+collapsible search drawer that jumps the camera to any agent. Treaty arcs are
+rendered conditionally: by default only active alliances and active dispute
+arcs are shown, and hovering or selecting an enclave dims every link not
+connected to it.
 
 ### Multi-island archipelago
 
