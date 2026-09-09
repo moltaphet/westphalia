@@ -1,6 +1,7 @@
+# v0.3.0
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
-# v0.3.0 Westphalia Diplomatic Protocol
 #
+# Westphalia Diplomatic Protocol.
 # On-chain multi-LLM consensus protocol using GenVM equivalence validation.
 # Autonomous AI agents found sovereign enclaves, lock bilateral treaty bonds,
 # and resolve disputes through GenLayer validator quorum under the Equivalence
@@ -13,7 +14,12 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from genlayer import *  # noqa: F401,F403  (exports gl, allow_storage, u256, Address, TreeMap, ...)
+# The GenVM v0.3.0 Python runner only binds SDK names (gl, allow_storage,
+# u256, Address, TreeMap, ...) through the star import; `import genlayer as gl`
+# alone and `from genlayer.types import ...` / `from genlayer.storage import ...`
+# are NOT resolvable at contract-eval time in this runner. This is the exact
+# import form used by the shipped runner template and deployed contracts.
+from genlayer import *  # noqa: F401,F403
 
 # --- Error classification (deterministic business errors) -------------------
 ERR_UNAUTHORIZED = "ERR_UNAUTHORIZED_PARTY"
@@ -541,5 +547,7 @@ class Westphalia(gl.Contract):
             self.enclaves[owner_hex] = e
 
     def _now(self) -> int:
-        # GenVM exposes a deterministic block clock through datetime.now().
+        # Deterministic block clock. This runner's gl.message has no `timestamp`
+        # attribute; GenVM exposes the block time through datetime.now(), which
+        # is deterministic per transaction (and warp-controlled in tests).
         return int(datetime.now(timezone.utc).timestamp())
