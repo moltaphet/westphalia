@@ -36,7 +36,7 @@ export default function TreasuryView({
   const claimable = state.treaties.filter((t) => t.status === "active" || t.status === "resolved");
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col gap-4 px-4 pb-4 pt-[144px] font-mono">
+    <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col gap-4 px-4 pb-4 pt-[104px] font-mono">
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryCard

@@ -70,7 +70,7 @@ export default function TopologyView({
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[144px] font-mono">
+    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[104px] font-mono">
       <div className="flex min-h-0 flex-1 flex-col rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Share2 size={15} className="text-cyan-400" />

@@ -43,7 +43,7 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
   const audit = selected ? auditForEvent(selected) : null;
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[144px] font-mono">
+    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[104px] font-mono">
       {/* Docket */}
       <div className="hud-scroll w-[300px] shrink-0 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">

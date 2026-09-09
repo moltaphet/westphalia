@@ -184,7 +184,7 @@ function Dossier({
 
   return (
     <div
-      className={`pointer-events-none absolute right-4 top-[132px] bottom-20 flex w-[344px] flex-col gap-3 transition-all duration-300 ease-in-out ${
+      className={`pointer-events-none absolute right-4 top-24 flex h-[calc(100vh-6.5rem)] w-[344px] flex-col gap-3 transition-all duration-300 ease-in-out ${
         collapsed ? "translate-x-[372px] opacity-0" : "translate-x-0 opacity-100"
       }`}
     >
@@ -820,7 +820,7 @@ export default function HudOverlay({
         {/* Left column: directory, feed, and docked legend stacked vertically
             so nothing overlaps. Slides out under cinematic / collapse. */}
         <div
-          className={`pointer-events-none absolute left-4 top-[132px] bottom-4 flex w-[320px] flex-col gap-2 transition-all duration-300 ease-in-out ${
+          className={`pointer-events-none absolute left-4 top-24 flex h-[calc(100vh-6.5rem)] w-[320px] flex-col gap-2 transition-all duration-300 ease-in-out ${
             leftCollapsed ? "-translate-x-[360px] opacity-0" : "translate-x-0 opacity-100"
           }`}
         >
