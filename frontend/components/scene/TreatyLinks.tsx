@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import type { Treaty } from "@/lib/types";
 import type { IslandLayout } from "@/lib/world";
-import { KIND_COLOR } from "@/lib/board";
 import { TILE, islandTopY } from "@/lib/world";
 import TreatyArc from "./TreatyArc";
 
@@ -42,15 +41,18 @@ export default function TreatyLinks({
         const lb = byId.get(t.parties[1]);
         if (!la || !lb) return null;
 
-        const dispute = t.status === "pending" || t.status === "breached";
-        const color = dispute
-          ? t.status === "breached"
-            ? "#ef4444"
-            : "#f59e0b"
-          : KIND_COLOR[t.kind] ?? "#22d3ee";
+        // Sleek tactical palette: emerald alliance, electric cyan trade,
+        // focused amber for links under active review.
+        const underReview = t.status === "pending" || t.status === "breached";
+        const color = underReview
+          ? "#f59e0b"
+          : t.kind === "trade"
+          ? "#06b6d4"
+          : "#10b981";
 
-        const connected = !focusId || t.parties.includes(focusId);
-        const opacity = connected ? 0.95 : 0.12;
+        // Context-aware focus: 40% when nothing is selected, 100% for
+        // connected vectors, 15% for unrelated ones.
+        const opacity = !focusId ? 0.4 : t.parties.includes(focusId) ? 1 : 0.15;
 
         return (
           <TreatyArc
@@ -58,7 +60,6 @@ export default function TreatyLinks({
             a={top(la)}
             b={top(lb)}
             color={color}
-            dispute={dispute}
             selected={t.id === selectedTreaty}
             opacity={opacity}
             onSelect={() => onSelectTreaty(t.id)}

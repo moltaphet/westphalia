@@ -4,16 +4,15 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 
-const PARTICLES = 26;
+const PHOTONS = 4; // discrete kinetic data packets per vector
 
-// A dynamic glowing data conduit between two citadels: an additive emissive
-// tube plus a stream of particle sprites flowing toward the destination.
-// Dispute links (amber/red) get an electric jitter on the whole arc.
+// A precision-engineered tactical treaty vector: a razor-thin additive laser
+// line following a low-profile quadratic Bezier, with a few crisp photon
+// pulses gliding from source to destination at a uniform speed.
 export default function TreatyArc({
   a,
   b,
   color,
-  dispute,
   selected,
   opacity,
   onSelect,
@@ -21,69 +20,53 @@ export default function TreatyArc({
   a: THREE.Vector3;
   b: THREE.Vector3;
   color: string;
-  dispute: boolean;
   selected: boolean;
   opacity: number;
   onSelect: () => void;
 }) {
-  const group = useRef<THREE.Group>(null);
-  const particles = useRef<THREE.Group>(null);
+  const photons = useRef<THREE.Group>(null);
 
   const curve = useMemo(() => {
     const mid = a.clone().add(b).multiplyScalar(0.5);
-    mid.y += a.distanceTo(b) * 0.32 + 1.4;
+    // Subtle, distance-proportional lift to avoid towering or chaotic loops.
+    mid.y += a.distanceTo(b) * 0.18 + 2.5;
     return new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone());
   }, [a, b]);
 
-  const speed = dispute ? 0.5 : 0.32;
-
   useFrame((state) => {
+    if (!photons.current) return;
     const t = state.clock.elapsedTime;
-    if (particles.current) {
-      const n = particles.current.children.length;
-      particles.current.children.forEach((child, i) => {
-        const phase = (t * speed + i / n) % 1;
-        child.position.copy(curve.getPoint(phase));
-      });
-    }
-    // Electric glitch vibration for contested / breached links.
-    if (group.current) {
-      if (dispute) {
-        group.current.position.set(
-          (Math.random() - 0.5) * 0.08,
-          (Math.random() - 0.5) * 0.08,
-          (Math.random() - 0.5) * 0.08
-        );
-      } else if (group.current.position.lengthSq() > 0) {
-        group.current.position.set(0, 0, 0);
-      }
-    }
+    const n = photons.current.children.length;
+    photons.current.children.forEach((child, i) => {
+      const phase = (t * 0.28 + i / n) % 1;
+      child.position.copy(curve.getPoint(phase));
+    });
   });
 
-  const visible = opacity > 0.35;
+  const lit = opacity > 0.5;
 
   return (
-    <group ref={group} onClick={(e) => { e.stopPropagation(); onSelect(); }}>
-      {/* Base emissive conduit (additive) */}
+    <group onClick={(e) => { e.stopPropagation(); onSelect(); }}>
+      {/* Razor-thin primary laser line */}
       <mesh>
-        <tubeGeometry args={[curve, 48, selected ? 0.06 : 0.035, 8, false]} />
+        <tubeGeometry args={[curve, 40, selected ? 0.055 : 0.04, 6, false]} />
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={opacity * 0.85}
+          opacity={opacity}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </mesh>
 
-      {/* Flowing data particles */}
-      {visible && (
-        <group ref={particles}>
-          {Array.from({ length: PARTICLES }).map((_, i) => (
+      {/* Precision photon pulses (only on lit vectors to keep the map clean) */}
+      {lit && (
+        <group ref={photons}>
+          {Array.from({ length: PHOTONS }).map((_, i) => (
             <mesh key={i}>
-              <sphereGeometry args={[selected ? 0.075 : 0.055, 6, 6]} />
+              <sphereGeometry args={[0.05, 8, 8]} />
               <meshBasicMaterial
-                color={color}
+                color="#ffffff"
                 transparent
                 opacity={opacity}
                 blending={THREE.AdditiveBlending}

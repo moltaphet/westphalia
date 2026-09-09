@@ -24,7 +24,6 @@ export default function CentralPlatform({
   const ringY = useRef<THREE.Mesh>(null);
   const ringZ = useRef<THREE.Mesh>(null);
   const reactor = useRef<THREE.Mesh>(null);
-  const beacon = useRef<THREE.Mesh>(null);
   const hover = baseY + 2.7;
 
   useFrame((state) => {
@@ -39,28 +38,10 @@ export default function CentralPlatform({
       const s = 0.42 + Math.sin(t * 1.6) * 0.08;
       reactor.current.scale.setScalar(s / 0.42);
     }
-    // Beacon shimmer.
-    if (beacon.current) {
-      const mat = beacon.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.06 + Math.abs(Math.sin(t * 0.9)) * 0.05;
-    }
   });
 
   return (
     <group>
-      {/* Skyward volumetric beacon rising from the core. */}
-      <mesh ref={beacon} position={[0, baseY + 16, 0]}>
-        <cylinderGeometry args={[0.7, 1.6, 34, 24, 1, true]} />
-        <meshBasicMaterial
-          color="#22d3ee"
-          transparent
-          opacity={0.08}
-          side={THREE.DoubleSide}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </mesh>
-
       <group ref={platform} position={[0, hover, 0]} scale={scale}>
         {/* Hex plinth */}
         <mesh castShadow>

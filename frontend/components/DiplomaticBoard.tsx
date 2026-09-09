@@ -12,7 +12,6 @@ import TreatyLinks from "./scene/TreatyLinks";
 import CentralPlatform from "./scene/CentralPlatform";
 import ParticleField from "./scene/ParticleField";
 import Causeways from "./scene/Causeways";
-import RadarSweep from "./scene/RadarSweep";
 
 interface Props {
   state: ProtocolState;
@@ -157,7 +156,6 @@ export default function DiplomaticBoard({
         <Suspense fallback={null}>
           <Stars radius={140} depth={70} count={2600} factor={3} saturation={0} fade speed={0.5} />
           <ParticleField count={1500} />
-          <RadarSweep />
 
           {/* Infinite cybernetic ground grid with radial opacity falloff. */}
           <Grid
