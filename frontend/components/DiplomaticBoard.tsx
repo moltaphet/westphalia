@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, PerspectiveCamera, Stars } from "@react-three/drei";
+import { Grid, OrbitControls, PerspectiveCamera, Stars } from "@react-three/drei";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import type { ProtocolState } from "@/lib/types";
 import { HUB, TILE, buildLayouts, islandTopY } from "@/lib/world";
@@ -121,6 +121,8 @@ export default function DiplomaticBoard({
     <div className="absolute inset-0">
       <CursorManager hovered={hoveredId !== null} />
       <Canvas shadows dpr={[1, 2]} gl={{ alpha: true, antialias: true }}>
+        {/* Deep atmospheric fog for cinematic depth falloff. */}
+        <fogExp2 attach="fog" args={["#040711", 0.015]} />
         <PerspectiveCamera makeDefault position={[56, 48, 56]} fov={32} />
         <OrbitControls
           makeDefault
@@ -154,8 +156,23 @@ export default function DiplomaticBoard({
 
         <Suspense fallback={null}>
           <Stars radius={140} depth={70} count={2600} factor={3} saturation={0} fade speed={0.5} />
-          <ParticleField count={620} />
+          <ParticleField count={1500} />
           <RadarSweep />
+
+          {/* Infinite cybernetic ground grid with radial opacity falloff. */}
+          <Grid
+            position={[0, -1.85, 0]}
+            args={[10, 10]}
+            infiniteGrid
+            cellSize={2}
+            cellThickness={0.6}
+            cellColor="#1e293b"
+            sectionSize={10}
+            sectionThickness={1}
+            sectionColor="#155e75"
+            fadeDistance={95}
+            fadeStrength={2.5}
+          />
 
           <Causeways layouts={layouts} />
 

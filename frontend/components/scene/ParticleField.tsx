@@ -4,21 +4,23 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 
-// Ambient "data dust": a subtle drifting particle grid across the isometric
-// plane that adds depth without competing with the treaty visuals.
-export default function ParticleField({ count = 420 }: { count?: number }) {
+// A glowing data-particle cloud: microscopic nodes drifting softly along the
+// Y and Z axes to give the scene volumetric atmospheric depth.
+export default function ParticleField({ count = 1500 }: { count?: number }) {
   const points = useRef<THREE.Points>(null);
 
-  const { positions, speeds } = useMemo(() => {
+  const { positions, driftY, driftZ } = useMemo(() => {
     const positions = new Float32Array(count * 3);
-    const speeds = new Float32Array(count);
+    const driftY = new Float32Array(count);
+    const driftZ = new Float32Array(count);
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 30;
-      positions[i * 3 + 1] = Math.random() * 9 + 0.5;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 30;
-      speeds[i] = 0.15 + Math.random() * 0.35;
+      positions[i * 3] = (Math.random() - 0.5) * 90;
+      positions[i * 3 + 1] = Math.random() * 26 - 2;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 90;
+      driftY[i] = 0.12 + Math.random() * 0.4;
+      driftZ[i] = (Math.random() - 0.5) * 0.3;
     }
-    return { positions, speeds };
+    return { positions, driftY, driftZ };
   }, [count]);
 
   useFrame((_, delta) => {
@@ -26,11 +28,11 @@ export default function ParticleField({ count = 420 }: { count?: number }) {
     if (!geo) return;
     const arr = geo.attributes.position.array as Float32Array;
     for (let i = 0; i < count; i++) {
-      arr[i * 3 + 1] += speeds[i] * delta;
-      if (arr[i * 3 + 1] > 10) arr[i * 3 + 1] = 0.5;
+      arr[i * 3 + 1] += driftY[i] * delta;
+      arr[i * 3 + 2] += driftZ[i] * delta;
+      if (arr[i * 3 + 1] > 24) arr[i * 3 + 1] = -2;
     }
     geo.attributes.position.needsUpdate = true;
-    if (points.current) points.current.rotation.y += delta * 0.01;
   });
 
   return (
@@ -39,11 +41,12 @@ export default function ParticleField({ count = 420 }: { count?: number }) {
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <pointsMaterial
-        size={0.06}
-        color="#38bdf8"
+        size={0.05}
+        color="#67e8f9"
         transparent
-        opacity={0.55}
+        opacity={0.7}
         sizeAttenuation
+        blending={THREE.AdditiveBlending}
         depthWrite={false}
       />
     </points>

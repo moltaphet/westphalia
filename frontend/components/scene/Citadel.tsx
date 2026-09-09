@@ -4,15 +4,32 @@ import { useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 
+export type CrestKind = "octahedron" | "icosahedron" | "torus" | "spiked";
+
 interface Props {
   id: string;
   tint: string; // biome accent tint
   statusColor: string; // status overlay color for emissive core
+  crest: CrestKind; // holographic sovereignty crest geometry
   position: [number, number]; // world (x, z) of the island center
   baseY: number; // top surface height of the citadel plateau
   active: boolean;
   onHover: (id: string | null) => void;
   onSelect: (id: string | null) => void;
+}
+
+function CrestGeometry({ kind }: { kind: CrestKind }) {
+  switch (kind) {
+    case "octahedron":
+      return <octahedronGeometry args={[0.55, 0]} />;
+    case "icosahedron":
+      return <icosahedronGeometry args={[0.55, 0]} />;
+    case "torus":
+      return <torusGeometry args={[0.42, 0.16, 8, 20]} />;
+    case "spiked":
+    default:
+      return <dodecahedronGeometry args={[0.55, 0]} />;
+  }
 }
 
 // A futuristic modular Data Bastion: hexagonal plinth, corner server towers
@@ -22,6 +39,7 @@ export default function Citadel({
   id,
   tint: tintHex,
   statusColor,
+  crest,
   position,
   baseY,
   active,
@@ -33,6 +51,7 @@ export default function Citadel({
   const ringA = useRef<THREE.Mesh>(null);
   const ringB = useRef<THREE.Mesh>(null);
   const strips = useRef<THREE.Group>(null);
+  const crestRef = useRef<THREE.Mesh>(null);
 
   const [x, z] = position;
   const tint = new THREE.Color(tintHex);
@@ -64,6 +83,11 @@ export default function Citadel({
         const mat = (c as THREE.Mesh).material as THREE.MeshStandardMaterial;
         mat.emissiveIntensity = pulse * (0.6 + (i % 3) * 0.2);
       });
+    }
+    if (crestRef.current) {
+      crestRef.current.rotation.y = t * 0.5;
+      crestRef.current.rotation.x = Math.sin(t * 0.4) * 0.4;
+      crestRef.current.position.y = baseY + 4.1 + Math.sin(t * 1.2) * 0.15;
     }
   });
 
@@ -145,6 +169,19 @@ export default function Citadel({
       <mesh ref={ringB} position={[0, baseY + 2.55, 0]} rotation={[Math.PI / 2.6, 0.5, 0]}>
         <torusGeometry args={[0.82, 0.02, 8, 40]} />
         <meshStandardMaterial color={statusColor} emissive={statusColor} emissiveIntensity={1.6} />
+      </mesh>
+
+      {/* Floating holographic sovereignty crest (geometry keyed to archetype) */}
+      <mesh ref={crestRef} position={[0, baseY + 4.1, 0]}>
+        <CrestGeometry kind={crest} />
+        <meshStandardMaterial
+          color={tint}
+          emissive={tint}
+          emissiveIntensity={1.8}
+          wireframe
+          transparent
+          opacity={0.85}
+        />
       </mesh>
 
       <group position={[1.05, baseY + 0.36, 1.05]}>

@@ -8,9 +8,18 @@ import type { AgentEnclave } from "@/lib/types";
 import type { IslandLayout } from "@/lib/world";
 import { generateIslandTiles, islandTopY, TILE } from "@/lib/world";
 import { VOXEL_H, STATUS_COLOR, STATUS_LABEL } from "@/lib/board";
-import Citadel from "./scene/Citadel";
+import Citadel, { type CrestKind } from "./scene/Citadel";
 import DisputeDome from "./scene/DisputeDome";
 import ContainmentGrid from "./scene/ContainmentGrid";
+import type { Archetype } from "@/lib/types";
+
+// Holographic crest geometry keyed to sovereign archetype.
+const CREST_BY_ARCHETYPE: Record<Archetype, CrestKind> = {
+  "Oracle Collective": "octahedron",
+  "Liquidity Nexus": "icosahedron",
+  "Autonomous Arbiter": "torus",
+  "Defense Vanguard": "spiked",
+};
 
 interface Props {
   enclave: AgentEnclave;
@@ -127,10 +136,19 @@ export default function ProceduralIsland({
         />
       </mesh>
 
+      {/* Color-matched citadel point light picking out voxel specular edges. */}
+      <pointLight
+        position={[cx * TILE, baseY + 3, cz * TILE]}
+        color={enclave.biomeTheme.accent}
+        intensity={1.4}
+        distance={18}
+        decay={2}
+      />
+
       {/* Terrain voxels */}
       <Instances limit={terrain.length} range={terrain.length} castShadow receiveShadow>
         <boxGeometry args={[TILE * 0.96, 1, TILE * 0.96]} />
-        <meshStandardMaterial roughness={0.82} metalness={0.08} />
+        <meshStandardMaterial roughness={0.45} metalness={0.35} />
         {terrain.map((t) => (
           <Instance
             key={t.key}
@@ -170,6 +188,7 @@ export default function ProceduralIsland({
         id={enclave.id}
         tint={enclave.biomeTheme.accent}
         statusColor={statusColor}
+        crest={CREST_BY_ARCHETYPE[enclave.archetype]}
         position={[cx * TILE, cz * TILE]}
         baseY={baseY}
         active={active}
