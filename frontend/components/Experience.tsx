@@ -31,6 +31,15 @@ export default function Experience() {
   const [foundOpen, setFoundOpen] = useState(false);
   // True while any HUD modal / audit inspector is open (reported by HudOverlay).
   const [hudOverlayOpen, setHudOverlayOpen] = useState(false);
+  // Collapsible side panels + cinematic mode (collapse both).
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const cinematic = leftCollapsed && rightCollapsed;
+  const toggleCinematic = () => {
+    const next = !cinematic;
+    setLeftCollapsed(next);
+    setRightCollapsed(next);
+  };
 
   // Suppress Drei Html scene labels whenever a modal/dialog is open so they
   // never bleed through the blurred backdrop. (Non-world views unmount the
@@ -62,6 +71,10 @@ export default function Experience() {
             onDispute={s.triggerDispute}
             onClaim={s.claimEscrow}
             onOverlayChange={setHudOverlayOpen}
+            leftCollapsed={leftCollapsed}
+            rightCollapsed={rightCollapsed}
+            onToggleLeft={() => setLeftCollapsed((v) => !v)}
+            onToggleRight={() => setRightCollapsed((v) => !v)}
           />
         </>
       )}
@@ -91,6 +104,8 @@ export default function Experience() {
         onConnect={s.connectWallet}
         onEnterReviewer={s.enterReviewerMode}
         onFound={() => setFoundOpen(true)}
+        cinematic={cinematic}
+        onToggleCinematic={toggleCinematic}
       />
       <GlobalFeedback pipeline={s.pipeline} lastReceipt={s.lastReceipt} />
 

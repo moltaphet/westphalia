@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Share2 } from "lucide-react";
-import type { ProtocolState, Treaty } from "@/lib/types";
+import type { ProtocolState, Treaty, TreatyKind } from "@/lib/types";
 import { KIND_COLOR, STATUS_COLOR } from "@/lib/board";
 import { orbitSlot } from "@/lib/world";
+
+const KIND_FILTERS: { kind: TreatyKind; label: string }[] = [
+  { kind: "trade", label: "TRADE" },
+  { kind: "non-aggression", label: "NON-AGGRESSION" },
+  { kind: "data-sharing", label: "ALLIANCE" },
+];
 
 interface Props {
   state: ProtocolState;
@@ -41,6 +47,18 @@ export default function TopologyView({
     [state.treaties]
   );
 
+  const [active, setActive] = useState<Set<TreatyKind>>(
+    () => new Set<TreatyKind>(["trade", "non-aggression", "data-sharing"])
+  );
+  const toggleKind = (k: TreatyKind) =>
+    setActive((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  const visibleTreaties = state.treaties.filter((t) => active.has(t.kind));
+
   const edge = (t: Treaty) => {
     const a = pos.get(t.parties[0]) ?? [CX, CY];
     const b = pos.get(t.parties[1]) ?? [CX, CY];
@@ -52,36 +70,69 @@ export default function TopologyView({
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[132px] font-mono">
+    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[144px] font-mono">
       <div className="flex min-h-0 flex-1 flex-col rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Share2 size={15} className="text-cyan-400" />
           <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">
             DIPLOMATIC TOPOLOGY
           </span>
-          <span className="ml-auto text-[9px] tracking-widest text-slate-500">
-            MULTILATERAL TREATY VECTORS - EDGE WIDTH = TRADE VOLUME
-          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            {KIND_FILTERS.map((f) => {
+              const on = active.has(f.kind);
+              const c = KIND_COLOR[f.kind];
+              return (
+                <button
+                  key={f.kind}
+                  onClick={() => toggleKind(f.kind)}
+                  className="flex items-center gap-1.5 rounded border px-2 py-1 text-[9px] font-bold tracking-widest transition"
+                  style={{
+                    color: on ? c : "#64748b",
+                    borderColor: on ? `${c}66` : "#334155",
+                    backgroundColor: on ? `${c}1a` : "transparent",
+                  }}
+                >
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: on ? c : "#475569" }} />
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="min-h-0 flex-1 p-2">
           <svg viewBox="0 0 800 600" className="h-full w-full">
-            {state.treaties.map((t) => {
+            {visibleTreaties.map((t) => {
               const { a, b, width, strokeColor, animated } = edge(t);
-              const active = t.id === selectedTreaty;
+              const sel = t.id === selectedTreaty;
               return (
-                <line
-                  key={t.id}
-                  x1={a[0]}
-                  y1={a[1]}
-                  x2={b[0]}
-                  y2={b[1]}
-                  stroke={strokeColor}
-                  strokeWidth={active ? width + 2 : width}
-                  strokeOpacity={active ? 1 : 0.7}
-                  className={animated ? "flow-dash" : undefined}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => onSelectTreaty(t.id)}
-                />
+                <g key={t.id}>
+                  <line
+                    x1={a[0]}
+                    y1={a[1]}
+                    x2={b[0]}
+                    y2={b[1]}
+                    stroke={strokeColor}
+                    strokeWidth={sel ? width + 2 : width}
+                    strokeOpacity={sel ? 1 : 0.7}
+                    className={animated ? "flow-dash" : undefined}
+                    style={{ cursor: "pointer" }}
+                    onClick={() => onSelectTreaty(t.id)}
+                  />
+                  {/* Pulsing directed particle traveling parties[0] -> parties[1]. */}
+                  <circle r={sel ? 4 : 3} fill={strokeColor} style={{ pointerEvents: "none" }}>
+                    <animateMotion
+                      dur={`${2.4 + (t.bondGen % 5) * 0.3}s`}
+                      repeatCount="indefinite"
+                      path={`M${a[0]},${a[1]} L${b[0]},${b[1]}`}
+                    />
+                    <animate
+                      attributeName="opacity"
+                      values="0.2;1;0.2"
+                      dur="1.4s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                </g>
               );
             })}
 

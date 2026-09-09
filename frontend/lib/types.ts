@@ -67,6 +67,7 @@ export interface AgentEnclave {
   slashingHistory: SlashingRecord[];
   summary: string;
   governance: string; // natural-language governance philosophy
+  spawnedAt?: number; // epoch ms when founded at runtime (drives spawn FX)
 }
 
 export interface Treaty {

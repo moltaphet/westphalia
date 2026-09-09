@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { Instances, Instance, Html } from "@react-three/drei";
 import type { AgentEnclave } from "@/lib/types";
 import type { IslandLayout } from "@/lib/world";
@@ -75,8 +76,47 @@ export default function ProceduralIsland({
   const runes = useMemo(() => terrain.filter((t) => t.rune), [terrain]);
   const baseY = islandTopY(layout.floatY);
 
+  // Procedural spawn FX: newly founded realms rise from y = -20 to 0 while an
+  // expanding neon shockwave ring sweeps outward.
+  const SPAWN_MS = 1600;
+  const rise = useRef<THREE.Group>(null);
+  const shock = useRef<THREE.Mesh>(null);
+  const spawning = useRef(enclave.spawnedAt !== undefined);
+
+  useFrame(() => {
+    if (!spawning.current || !enclave.spawnedAt) return;
+    const t = Math.min(1, (Date.now() - enclave.spawnedAt) / SPAWN_MS);
+    const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+    if (rise.current) rise.current.position.y = -20 * (1 - ease);
+    if (shock.current) {
+      const s = 1 + ease * layout.radius * 2.4;
+      shock.current.scale.set(s, s, s);
+      const mat = shock.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = (1 - t) * 0.8;
+    }
+    if (t >= 1) spawning.current = false;
+  });
+
   return (
-    <group>
+    <group ref={rise}>
+      {/* Spawn shockwave ring */}
+      {enclave.spawnedAt !== undefined && (
+        <mesh
+          ref={shock}
+          position={[cx * TILE, layout.floatY + 0.1, cz * TILE]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[layout.radius * 0.9, layout.radius * 1.02, 64]} />
+          <meshBasicMaterial
+            color={enclave.biomeTheme.accent}
+            transparent
+            opacity={0}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
       {/* Floating keel */}
       <mesh position={[cx * TILE, layout.floatY - 1.6, cz * TILE]} rotation={[Math.PI, 0, 0]}>
         <coneGeometry args={[layout.radius * 0.85, 4.2, 6]} />

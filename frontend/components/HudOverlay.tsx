@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  ChevronLeft,
+  ChevronRight,
   Cpu,
   Gavel,
   HandCoins,
@@ -39,6 +41,10 @@ interface Props {
   onDispute: (treatyId: string, evidence: string) => void;
   onClaim: (treatyId: string) => void;
   onOverlayChange: (open: boolean) => void;
+  leftCollapsed: boolean;
+  rightCollapsed: boolean;
+  onToggleLeft: () => void;
+  onToggleRight: () => void;
 }
 
 type ModalKind = "propose" | "dispute" | "claim" | null;
@@ -158,11 +164,13 @@ function Dossier({
   state,
   selectedId,
   selectedTreaty,
+  collapsed,
   onSelectTreaty,
 }: {
   state: ProtocolState;
   selectedId: string | null;
   selectedTreaty: string | null;
+  collapsed: boolean;
   onSelectTreaty: (id: string | null) => void;
 }) {
   const sov: AgentEnclave | null =
@@ -175,7 +183,11 @@ function Dossier({
   }, [sov, state.treaties]);
 
   return (
-    <div className="pointer-events-none absolute right-4 top-[132px] bottom-20 flex w-[344px] flex-col gap-3">
+    <div
+      className={`pointer-events-none absolute right-4 top-[132px] bottom-20 flex w-[344px] flex-col gap-3 transition-all duration-300 ease-in-out ${
+        collapsed ? "translate-x-[372px] opacity-0" : "translate-x-0 opacity-100"
+      }`}
+    >
       <Panel className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Shield size={15} className="text-cyan-400" />
@@ -763,6 +775,10 @@ export default function HudOverlay({
   onDispute,
   onClaim,
   onOverlayChange,
+  leftCollapsed,
+  rightCollapsed,
+  onToggleLeft,
+  onToggleRight,
 }: Props) {
   const [modal, setModal] = useState<ModalKind>(null);
   const [auditEvent, setAuditEvent] = useState<LedgerEvent | null>(null);
@@ -802,8 +818,12 @@ export default function HudOverlay({
           above the top bar and every scene label. */}
       <div className="pointer-events-none absolute inset-0 z-10 font-mono">
         {/* Left column: directory, feed, and docked legend stacked vertically
-            so nothing overlaps. */}
-        <div className="pointer-events-none absolute left-4 top-[132px] bottom-4 flex w-[320px] flex-col gap-2">
+            so nothing overlaps. Slides out under cinematic / collapse. */}
+        <div
+          className={`pointer-events-none absolute left-4 top-[132px] bottom-4 flex w-[320px] flex-col gap-2 transition-all duration-300 ease-in-out ${
+            leftCollapsed ? "-translate-x-[360px] opacity-0" : "translate-x-0 opacity-100"
+          }`}
+        >
           <RealmDirectory
             enclaves={state.enclaves}
             selectedId={selectedId}
@@ -813,12 +833,37 @@ export default function HudOverlay({
           <Legend />
         </div>
 
+        {/* Persistent left toggle: slides between the feed's right edge and the
+            screen edge so the panel can always be reopened. */}
+        <button
+          onClick={onToggleLeft}
+          title={leftCollapsed ? "Show treaty feed" : "Hide treaty feed"}
+          className={`pointer-events-auto absolute top-1/2 z-20 flex h-12 w-6 -translate-y-1/2 items-center justify-center rounded-r border border-slate-700/60 bg-slate-900/90 text-slate-300 shadow-hud backdrop-blur-md transition-all duration-300 ease-in-out hover:text-cyan-300 ${
+            leftCollapsed ? "left-0" : "left-[332px]"
+          }`}
+        >
+          {leftCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+
         <Dossier
           state={state}
           selectedId={selectedId}
           selectedTreaty={selectedTreaty}
+          collapsed={rightCollapsed}
           onSelectTreaty={onSelectTreaty}
         />
+
+        {/* Persistent right toggle for the dossier. */}
+        <button
+          onClick={onToggleRight}
+          title={rightCollapsed ? "Show dossier" : "Hide dossier"}
+          className={`pointer-events-auto absolute top-1/2 z-20 flex h-12 w-6 -translate-y-1/2 items-center justify-center rounded-l border border-slate-700/60 bg-slate-900/90 text-slate-300 shadow-hud backdrop-blur-md transition-all duration-300 ease-in-out hover:text-cyan-300 ${
+            rightCollapsed ? "right-0" : "right-[356px]"
+          }`}
+        >
+          {rightCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+        </button>
+
         <ActionBar onAction={setModal} />
       </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Banknote, Coins, HandCoins, TrendingUp, Vault } from "lucide-react";
+import { Banknote, Coins, HandCoins, ShieldAlert, TrendingUp, Vault } from "lucide-react";
 import type { ProtocolState } from "@/lib/types";
 import { STATUS_COLOR } from "@/lib/board";
 
@@ -20,6 +20,14 @@ export default function TreasuryView({
     const arr = state.enclaves.map((s) => s.yieldApr);
     return arr.reduce((a, b) => a + b, 0) / (arr.length || 1);
   }, [state.enclaves]);
+  const slashingReserve = useMemo(
+    () =>
+      state.enclaves.reduce(
+        (sum, e) => sum + e.slashingHistory.reduce((a, r) => a + r.amountGen, 0),
+        0
+      ),
+    [state.enclaves]
+  );
   const maxEscrow = useMemo(
     () => Math.max(...state.enclaves.map((s) => s.lockedEscrowGen), 1),
     [state.enclaves]
@@ -28,9 +36,9 @@ export default function TreasuryView({
   const claimable = state.treaties.filter((t) => t.status === "active" || t.status === "resolved");
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col gap-4 px-4 pb-4 pt-[132px] font-mono">
+    <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col gap-4 px-4 pb-4 pt-[144px] font-mono">
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryCard
           icon={<Coins size={16} className="text-cyan-400" />}
           label="TOTAL VALUE LOCKED"
@@ -42,6 +50,12 @@ export default function TreasuryView({
           label="PROTOCOL TREASURY (FORFEITED)"
           value={`${treasury.toLocaleString("en-US")} GEN`}
           tone="#ef4444"
+        />
+        <SummaryCard
+          icon={<ShieldAlert size={16} className="text-amber-400" />}
+          label="SLASHING RESERVE"
+          value={`${slashingReserve.toLocaleString("en-US")} GEN`}
+          tone="#f59e0b"
         />
         <SummaryCard
           icon={<TrendingUp size={16} className="text-emerald-400" />}

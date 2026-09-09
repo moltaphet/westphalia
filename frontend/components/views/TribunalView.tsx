@@ -13,6 +13,25 @@ const VOTE_COLOR: Record<ValidatorVote, string> = {
   ABSTAIN: "#94a3b8",
 };
 
+// Case severity derived from the ledger event kind.
+function severityFor(kind: string): { label: string; color: string } {
+  if (kind === "territory-slashed") return { label: "CRITICAL", color: "#ef4444" };
+  if (kind === "dispute-opened") return { label: "HIGH", color: "#f59e0b" };
+  return { label: "INFO", color: "#22d3ee" };
+}
+
+function SeverityBadge({ kind }: { kind: string }) {
+  const s = severityFor(kind);
+  return (
+    <span
+      className="rounded px-1.5 py-0.5 text-[8px] font-bold tracking-widest"
+      style={{ color: s.color, backgroundColor: `${s.color}22`, border: `1px solid ${s.color}55` }}
+    >
+      {s.label}
+    </span>
+  );
+}
+
 export default function TribunalView({ state }: { state: ProtocolState }) {
   const cases = useMemo(
     () => state.ledger.filter((e) => CASE_KINDS.includes(e.kind)),
@@ -24,7 +43,7 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
   const audit = selected ? auditForEvent(selected) : null;
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[132px] font-mono">
+    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[144px] font-mono">
       {/* Docket */}
       <div className="hud-scroll w-[300px] shrink-0 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
@@ -44,13 +63,14 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
                     : "border-slate-700/60 bg-slate-800/40 hover:border-slate-500"
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] uppercase tracking-widest text-slate-500">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-slate-500">
+                    <SeverityBadge kind={c.kind} />
                     {c.kind.replace(/-/g, " ")}
                   </span>
                   <span className="font-mono text-[9px] text-slate-600">#{c.block}</span>
                 </div>
-                <p className="text-[11px] leading-snug text-slate-300">{c.message}</p>
+                <p className="mt-1 text-[11px] leading-snug text-slate-300">{c.message}</p>
               </button>
             );
           })}
@@ -143,6 +163,40 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
                   ))}
                 </div>
               </section>
+
+              {/* Real-time equivalence consensus meter */}
+              {(() => {
+                const total = audit.validators.length || 1;
+                const breach = audit.validators.filter((v) => v.vote === "BREACH").length;
+                const compliant = audit.validators.filter((v) => v.vote === "COMPLIANT").length;
+                const majority = Math.round((Math.max(breach, compliant) / total) * 100);
+                const verdictColor = VOTE_COLOR[audit.finalVote];
+                return (
+                  <section>
+                    <div className="mb-2 flex items-center justify-between text-[10px] tracking-widest text-slate-400">
+                      <span>EQUIVALENCE CONSENSUS METER</span>
+                      <span className="font-bold" style={{ color: verdictColor }}>
+                        {majority}% {audit.finalVote}
+                      </span>
+                    </div>
+                    <div className="flex h-3 w-full overflow-hidden rounded-full border border-slate-700 bg-slate-900">
+                      <div
+                        className="h-full transition-all duration-700"
+                        style={{ width: `${(breach / total) * 100}%`, backgroundColor: "#ef4444" }}
+                      />
+                      <div
+                        className="h-full transition-all duration-700"
+                        style={{ width: `${(compliant / total) * 100}%`, backgroundColor: "#10b981" }}
+                      />
+                    </div>
+                    <div className="mt-1 flex justify-between text-[9px] text-slate-500">
+                      <span className="text-red-400">{breach} BREACH</span>
+                      <span>quorum threshold 66%</span>
+                      <span className="text-emerald-400">{compliant} COMPLIANT</span>
+                    </div>
+                  </section>
+                );
+              })()}
 
               <section>
                 <div className="mb-2 text-[10px] tracking-widest text-slate-400">

@@ -6,6 +6,7 @@ import {
   Banknote,
   ChevronDown,
   Coins,
+  Film,
   Gavel,
   Globe2,
   Landmark,
@@ -58,6 +59,8 @@ export default function TopBar({
   onConnect,
   onEnterReviewer,
   onFound,
+  cinematic,
+  onToggleCinematic,
 }: {
   state: ProtocolState;
   network: NetworkConfig;
@@ -69,6 +72,8 @@ export default function TopBar({
   onConnect: () => void;
   onEnterReviewer: () => void;
   onFound: () => void;
+  cinematic: boolean;
+  onToggleCinematic: () => void;
 }) {
   const [netOpen, setNetOpen] = useState(false);
 
@@ -110,6 +115,18 @@ export default function TopBar({
             className="flex items-center gap-1.5 rounded border border-emerald-400/60 bg-emerald-500/20 px-3 py-2 text-[11px] font-bold tracking-widest text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.35)] hover:bg-emerald-500/30"
           >
             <Plus size={14} /> FOUND SOVEREIGNTY
+          </button>
+
+          <button
+            onClick={onToggleCinematic}
+            title="Collapse both side panels for a full-viewport cinematic view"
+            className={`flex items-center gap-1.5 rounded border px-3 py-2 text-[11px] font-bold tracking-widest transition ${
+              cinematic
+                ? "border-violet-400/60 bg-violet-500/25 text-violet-100 shadow-[0_0_16px_rgba(167,139,250,0.4)]"
+                : "border-slate-700 bg-slate-800/70 text-slate-300 hover:border-violet-400/60 hover:text-violet-100"
+            }`}
+          >
+            <Film size={14} /> CINEMATIC
           </button>
 
           <div className="relative">

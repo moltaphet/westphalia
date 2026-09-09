@@ -37,20 +37,44 @@ function CursorManager({ hovered }: { hovered: boolean }) {
 }
 
 // Smoothly re-frames the orbit target onto the focused island / sector.
-function CameraRig({ focus }: { focus: [number, number, number] }) {
+// Cinematic fly-to: lerps both the camera position and the orbit target to a
+// dynamic isometric framing of the focused citadel, then releases control back
+// to the user once it has arrived. Re-arms only when flyKey changes.
+function CameraRig({
+  camPos,
+  target,
+  flyKey,
+}: {
+  camPos: [number, number, number];
+  target: [number, number, number];
+  flyKey: string;
+}) {
   const controls = useThree((s) => s.controls) as
     | { target: THREE.Vector3; update: () => void }
     | null;
-  const target = useRef(new THREE.Vector3(focus[0], focus[1], focus[2]));
+  const camera = useThree((s) => s.camera);
+  const desiredPos = useRef(new THREE.Vector3(...camPos));
+  const desiredTarget = useRef(new THREE.Vector3(...target));
+  const flying = useRef(true);
 
   useEffect(() => {
-    target.current.set(focus[0], focus[1], focus[2]);
-  }, [focus]);
+    desiredPos.current.set(camPos[0], camPos[1], camPos[2]);
+    desiredTarget.current.set(target[0], target[1], target[2]);
+    flying.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flyKey]);
 
   useFrame(() => {
-    if (!controls) return;
-    controls.target.lerp(target.current, 0.06);
+    if (!controls || !flying.current) return;
+    camera.position.lerp(desiredPos.current, 0.08);
+    controls.target.lerp(desiredTarget.current, 0.08);
     controls.update();
+    if (
+      camera.position.distanceTo(desiredPos.current) < 0.4 &&
+      controls.target.distanceTo(desiredTarget.current) < 0.4
+    ) {
+      flying.current = false;
+    }
   });
   return null;
 }
@@ -72,12 +96,23 @@ export default function DiplomaticBoard({
     return m;
   }, [layouts]);
 
-  const focus = useMemo<[number, number, number]>(() => {
-    if (focusId) {
-      const l = layoutMap.get(focusId);
-      if (l) return [l.center[0] * TILE, islandTopY(l.floatY), l.center[1] * TILE];
+  // Compute the orbit target and a dynamic isometric camera position for the
+  // current focus (an island citadel, or the whole-archipelago overview).
+  const { camPos, target } = useMemo<{
+    camPos: [number, number, number];
+    target: [number, number, number];
+  }>(() => {
+    const l = focusId ? layoutMap.get(focusId) : undefined;
+    if (l) {
+      const cx = l.center[0] * TILE;
+      const cz = l.center[1] * TILE;
+      const cy = islandTopY(l.floatY);
+      return {
+        target: [cx, cy, cz],
+        camPos: [cx + 15, cy + 13, cz + 15],
+      };
     }
-    return [0, 2, 0];
+    return { target: [0, 2, 0], camPos: [56, 48, 56] };
   }, [focusId, layoutMap]);
 
   const treatyFocus = hoveredId ?? selectedId;
@@ -98,7 +133,7 @@ export default function DiplomaticBoard({
           maxPolarAngle={Math.PI / 2.2}
           target={[0, 2, 0]}
         />
-        <CameraRig focus={focus} />
+        <CameraRig camPos={camPos} target={target} flyKey={focusId ?? "overview"} />
 
         <ambientLight intensity={0.5} />
         <hemisphereLight args={["#38bdf8", "#0f172a", 0.5]} />

@@ -364,6 +364,7 @@ export function useWestphaliaStore() {
           slashingHistory: [],
           summary: `${input.archetype}. ${preset.blurb}`,
           governance: input.governance,
+          spawnedAt: Date.now(),
         };
         setEnclaves((prev) => [...prev, enclave]);
         pushLedger({
