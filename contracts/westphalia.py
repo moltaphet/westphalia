@@ -37,6 +37,9 @@ ERR_STATE = "ERR_INVALID_STATE"
 ERR_PARAMS = "ERR_INVALID_TREATY_PARAMS"
 ERR_UNTRUSTED_CAP = "ERR_UNTRUSTED_BOND_CAP"
 ERR_NOT_MATURED = "ERR_ENCLAVE_NOT_MATURED"
+ERR_UNSAFE_URL = "ERR_UNSAFE_TELEMETRY_URL"
+ERR_COOLDOWN = "ERR_DISPUTE_COOLDOWN"
+ERR_EMPTY_EVIDENCE = "ERR_EMPTY_EVIDENCE"
 
 # --- Error classification (non-deterministic / oracle failures) -------------
 ERR_TRANSIENT = "[TRANSIENT]"
@@ -90,16 +93,84 @@ REP_REWARD_CRITICAL = 15  # vindicated plaintiff
 REP_DEBIT_ELEVATED = 10  # deviating defendant
 REP_DEBIT_MALICIOUS = 20  # frivolous plaintiff
 
+# Anti-Sybil / anti-griefing hardening.
+MIN_ENCLAVE_COLLATERAL = u256(100 * ATTO)  # floor to make Sybil enclaves costly
+MIN_REP_THROUGHPUT = u256(100 * ATTO)  # defendant bond needed to earn reputation
+DISPUTE_COOLDOWN = 300  # seconds between successful disputes on one treaty
+
+# SSRF blocklist: private, loopback, link-local (cloud metadata), and unspecified
+# address ranges are rejected before any oracle fetch.
+_BLOCKED_HOSTS = (
+    "localhost",
+    "127.",
+    "10.",
+    "192.168.",
+    "169.254.",  # AWS/GCP/Azure metadata + link-local
+    "0.0.0.0",
+    "::1",
+    "metadata.google.internal",
+)
+
 
 def _sanitize(s: str) -> str:
     """Strip control characters, Unicode spoofing, and non-ASCII bytes from
-    untrusted input before it is ever serialized into a prompt."""
+    untrusted input before it is ever serialized into a prompt. Angle brackets
+    are neutralized to square brackets so an attacker cannot forge a closing
+    </untrusted_input> delimiter or inject nested tags to escape isolation."""
     out = []
     for ch in s:
         o = ord(ch)
+        if o == 60:  # '<'
+            out.append("[")
+            continue
+        if o == 62:  # '>'
+            out.append("]")
+            continue
         if 32 <= o < 127:
             out.append(ch)
     return "".join(out).strip()
+
+
+def _canon_hash(h: str) -> str:
+    """Canonicalize an evidence hash for the replay index: ASCII-sanitize,
+    lowercase, and strip ALL whitespace so case/whitespace mutations cannot
+    bypass the deterministic replay lock."""
+    base = _sanitize(h).lower()
+    return "".join(base.split())
+
+
+def _is_safe_url(url: str) -> bool:
+    """Deterministic SSRF guard. Requires an http(s) scheme and rejects
+    loopback, private, link-local (cloud metadata), unspecified, and bracketed
+    IPv6 hosts before any oracle fetch is attempted."""
+    u = url.strip()
+    low = u.lower()
+    if not (low.startswith("https://") or low.startswith("http://")):
+        return False
+    rest = u.split("://", 1)[1]
+    host = rest.split("/", 1)[0]
+    host = host.split("?", 1)[0]
+    if "@" in host:  # strip user credentials
+        host = host.split("@", 1)[1]
+    if host.startswith("["):  # bracketed IPv6 (blocks [::1], [fe80::], ...)
+        return False
+    hostname = host.split(":", 1)[0].lower()  # drop port
+    if hostname == "":
+        return False
+    for blocked in _BLOCKED_HOSTS:
+        if hostname == blocked or hostname.startswith(blocked):
+            return False
+    # 172.16.0.0 - 172.31.255.255 private range.
+    if hostname.startswith("172."):
+        parts = hostname.split(".")
+        if len(parts) >= 2:
+            try:
+                second = int(parts[1])
+            except (ValueError, TypeError):
+                second = -1
+            if 16 <= second <= 31:
+                return False
+    return True
 
 
 def _quantize_bps(raw_metric: float) -> int:
@@ -309,6 +380,7 @@ class Treaty:
     params_json: str  # typed per-kind parameters (normalized JSON)
     dissolution_a: bool  # party_a signed amicable dissolution
     dissolution_b: bool  # party_b signed amicable dissolution
+    last_dispute_at: u256  # cooldown clock for successful disputes
 
 
 class Westphalia(gl.Contract):
@@ -383,6 +455,16 @@ class Westphalia(gl.Contract):
         return gl.message.sender_address.as_hex
 
     @gl.public.view
+    def sanitize_preview(self, s: str) -> str:
+        """Expose the untrusted-input sanitizer for adversarial verification."""
+        return _sanitize(s)
+
+    @gl.public.view
+    def is_safe_url(self, url: str) -> bool:
+        """Expose the SSRF guard for adversarial verification."""
+        return _is_safe_url(url)
+
+    @gl.public.view
     def claimable_of(self, owner_hex: str) -> str:
         if owner_hex not in self.claimable:
             return "0"
@@ -410,8 +492,10 @@ class Westphalia(gl.Contract):
     # -------------------------------------------------------------- lifecycle
     @gl.public.write.payable
     def found_sovereignty(self, name: str, archetype: str, charter: str) -> None:
-        if gl.message.value == u256(0):
-            raise gl.vm.UserError(f"{ERR_INSUFFICIENT_BOND} collateral required")
+        # Anti-Sybil floor: dust-collateral enclaves are rejected so Sybil
+        # identities (and cheap reputation farming) carry a real economic cost.
+        if gl.message.value < MIN_ENCLAVE_COLLATERAL:
+            raise gl.vm.UserError(f"{ERR_INSUFFICIENT_BOND} minimum enclave collateral")
         key = gl.message.sender_address.as_hex
         if key in self.enclaves:
             raise gl.vm.UserError(f"{ERR_STATE} enclave already exists")
@@ -474,6 +558,7 @@ class Westphalia(gl.Contract):
             params_json=normalized_params,
             dissolution_a=False,
             dissolution_b=False,
+            last_dispute_at=u256(0),
         )
         self.next_treaty_id = tid + u256(1)
         self.locked_escrow += gl.message.value
@@ -552,6 +637,13 @@ class Westphalia(gl.Contract):
         if t.active_dispute:
             raise gl.vm.UserError(f"{ERR_DISPUTE_PENDING}")
 
+        # SSRF guard: reject internal / metadata / private telemetry targets
+        # deterministically, before any oracle fetch (prevents DoS + timeouts).
+        if not _is_safe_url(primary_url):
+            raise gl.vm.UserError(f"{ERR_UNSAFE_URL} primary")
+        if secondary_url != "" and not _is_safe_url(secondary_url):
+            raise gl.vm.UserError(f"{ERR_UNSAFE_URL} secondary")
+
         # Reputation-scaled variable dispute bond.
         plaintiff_hex = sender.as_hex
         plaintiff_rep = (
@@ -563,10 +655,20 @@ class Westphalia(gl.Contract):
         if gl.message.value < required:
             raise gl.vm.UserError(f"{ERR_INSUFFICIENT_BOND} required {required}")
 
-        # Deterministic replay rejection, committed only after a concrete verdict.
-        rkey = f"{int(treaty_id)}|{plaintiff_hex}|{_sanitize(evidence_hash)}"
+        # Deterministic replay rejection over a CANONICAL evidence hash (case +
+        # whitespace insensitive) so trivial mutations cannot bypass the lock.
+        canon = _canon_hash(evidence_hash)
+        if canon == "":
+            raise gl.vm.UserError(f"{ERR_EMPTY_EVIDENCE}")
+        rkey = f"{int(treaty_id)}|{plaintiff_hex}|{canon}"
         if rkey in self.replay:
             raise gl.vm.UserError(f"{ERR_REPLAY}")
+
+        # Per-treaty dispute cooldown throttles rapid repeat slashing (griefing).
+        if int(t.last_dispute_at) > 0 and (
+            self._now() - int(t.last_dispute_at) < DISPUTE_COOLDOWN
+        ):
+            raise gl.vm.UserError(f"{ERR_COOLDOWN}")
 
         # --- Non-deterministic dual-feed multi-LLM consensus round ----------
         tier = self._adjudicate(
@@ -596,7 +698,10 @@ class Westphalia(gl.Contract):
             self.locked_escrow -= defendant_bond + plaintiff_bond
             self._credit(plaintiff_hex, defendant_bond + plaintiff_bond + dispute_bond)
             self._sanction(defendant_hex)
-            self._reputation_reward(plaintiff_hex, REP_REWARD_CRITICAL)
+            # Reputation is only earned through legitimate economic throughput:
+            # dust-bond treaties cannot farm reputation.
+            if defendant_bond >= MIN_REP_THROUGHPUT:
+                self._reputation_reward(plaintiff_hex, REP_REWARD_CRITICAL)
             t.status = ST_SETTLED
             t.active_dispute = False
         elif tier == ELEVATED_RISK:
@@ -607,7 +712,11 @@ class Westphalia(gl.Contract):
                 t.bond_b = t.bond_b - slash
             else:
                 t.bond_a = t.bond_a - slash
-            self._credit(plaintiff_hex, dispute_bond)
+            # Non-refundable validation fee: every non-critical dispute costs the
+            # plaintiff, so repeated ELEVATED slashing cannot be free griefing.
+            fee = VALIDATION_FEE if dispute_bond >= VALIDATION_FEE else dispute_bond
+            self.reserves += fee
+            self._credit(plaintiff_hex, dispute_bond - fee)
             self._reputation_debit(defendant_hex, REP_DEBIT_ELEVATED)
             t.status = ST_ACTIVE
             t.active_dispute = False
@@ -623,6 +732,8 @@ class Westphalia(gl.Contract):
             t.status = ST_ACTIVE
             t.active_dispute = False
 
+        # Stamp the cooldown clock on every concrete resolution.
+        t.last_dispute_at = u256(self._now())
         self.treaties[treaty_id] = t
         return tier
 
