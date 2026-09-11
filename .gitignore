@@ -3,3 +3,17 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+
+# Secrets: the agent keystore holds plaintext private keys (keys.py chmods them
+# 0600). These must never enter git history -- a committed key cannot be
+# unpublished by deleting it in a later commit.
+agent/keys/
+*.key.json
+
+# Environment overrides (may carry deployer keys or RPC credentials)
+.env
+.env.local
+.env.*.local
+
+# GenVM test harness output, regenerated on every run
+artifacts/
