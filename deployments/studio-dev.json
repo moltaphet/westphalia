@@ -1,0 +1,29 @@
+{
+  "network": "studio-dev",
+  "chain_id": 61997,
+  "rpc_url": "https://studio-dev.genlayer.com/api",
+  "contract_address": "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+  "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+  "source": "contracts/westphalia.py",
+  "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
+  "source_sha256_at_record": "aa87a828a401eef55a72058eb6bcc95ee3e869b7c940b10bef23e8c71050845a",
+  "verification": {
+    "method": "live view reads via genlayer_py",
+    "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address.",
+    "observed": {
+      "get_protocol_overview": {
+        "balance": "0",
+        "locked_escrow": "0",
+        "next_treaty_id": "1",
+        "reserves": "0",
+        "solvent": true,
+        "total_claimable": "0",
+        "total_collateral": "0"
+      },
+      "required_dispute_bond_for_fresh_address": "500000000000000000000",
+      "claimable_of_for_fresh_address": "0",
+      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance"
+    }
+  },
+  "state_note": "Freshly deployed and unused: next_treaty_id is 1 and every tracked balance is zero. This address supersedes the prior studio-dev instance, which is no longer referenced anywhere in the repository."
+}
