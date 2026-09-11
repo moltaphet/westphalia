@@ -1,7 +1,7 @@
 """Westphalia V2 direct-mode tests: dual-feed telemetry, dynamic reputation
 bonds, anti-Sybil maturation, amicable dissolution, and strict solvency.
 
-Run: pytest tests/direct/ -v   (Python 3.12; see README for the uv env).
+Run: pytest tests/direct/ -v  (Python 3.12; see README for the uv env).
 Pure-ASCII. Direct mode executes the leader function only.
 """
 
@@ -11,7 +11,11 @@ from conftest import (
     COLLATERAL,
     BOND,
     MIN_DISPUTE,
+    ORACLE_P,
+    ORACLE_S,
     khex,
+    future_expiry,
+    warp_later,
     active_treaty,
     add_treaty,
     found,
@@ -30,15 +34,12 @@ def test_dual_telemetry_agreement(direct_vm, direct_deploy, direct_alice, direct
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
 
     # Both feeds report the same high breach metric (delta 0 -> no contradiction).
-    mock_telemetry(direct_vm, 0.9)  # matches both primary and secondary URLs
+    mock_telemetry(direct_vm, 0.9)  # matches both primary and secondary oracles
     mock_verdict(direct_vm, "CRITICAL_BREACH")
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    verdict = c.trigger_dispute(
-        tid, "verified breach", "ipfs://e", "hda1",
-        "https://telemetry.example/primary", "https://telemetry.example/secondary",
-    )
+    verdict = c.trigger_dispute(tid, "verified breach", "ipfs://e", "hda1")
     direct_vm.value = 0
 
     assert verdict == "CRITICAL_BREACH"
@@ -61,10 +62,7 @@ def test_dual_telemetry_divergence_slashes(direct_vm, direct_deploy, direct_alic
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    verdict = c.trigger_dispute(
-        tid, "fabricated breach", "ipfs://e", "hdd1",
-        "https://telemetry.example/primary", "https://telemetry.example/secondary",
-    )
+    verdict = c.trigger_dispute(tid, "fabricated breach", "ipfs://e", "hdd1")
     direct_vm.value = 0
 
     assert verdict == "MALICIOUS_REPORT"
@@ -107,7 +105,7 @@ def test_reputation_scaled_dispute_bond(direct_vm, direct_deploy, direct_alice, 
     mock_verdict(direct_vm, "CRITICAL_BREACH")
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    c.trigger_dispute(tid_ab, "breach", "ipfs://e", "hrs1", "https://p/x", "https://s/y")
+    c.trigger_dispute(tid_ab, "breach", "ipfs://e", "hrs1")
     direct_vm.value = 0
 
     discounted = MIN_DISPUTE * (150 - 65) // 100  # rep 65 -> 0.85 x MIN
@@ -124,13 +122,13 @@ def test_reputation_scaled_dispute_bond(direct_vm, direct_deploy, direct_alice, 
     direct_vm.sender = direct_alice
     direct_vm.value = discounted - 1
     with direct_vm.expect_revert("ERR_INSUFFICIENT_BOND"):
-        c.trigger_dispute(tid_ac, "x", "ipfs://e", "hrs2", "https://p/x", "https://s/y")
+        c.trigger_dispute(tid_ac, "x", "ipfs://e", "hrs2")
     direct_vm.value = 0
 
     # Exactly the scaled bond is accepted.
     direct_vm.sender = direct_alice
     direct_vm.value = discounted
-    v = c.trigger_dispute(tid_ac, "x", "ipfs://e", "hrs3", "https://p/x", "https://s/y")
+    v = c.trigger_dispute(tid_ac, "x", "ipfs://e", "hrs3")
     direct_vm.value = 0
     assert v == "NORMAL"
 
@@ -146,14 +144,16 @@ def test_sybil_maturation_lock(direct_vm, direct_deploy, direct_alice, direct_bo
     direct_vm.sender = direct_alice
     direct_vm.value = HIGH_BOND
     with direct_vm.expect_revert("ERR_ENCLAVE_NOT_MATURED"):
-        c.propose_treaty(bob, "TRADE_CORRIDOR", "big", 4_000_000_000, params_for("TRADE_CORRIDOR"))
+        c.propose_treaty(bob, "TRADE_CORRIDOR", "big", future_expiry(),
+                         params_for("TRADE_CORRIDOR"), ORACLE_P, ORACLE_S)
     direct_vm.value = 0
 
     # After the maturation window passes, the high-tier treaty is allowed.
-    direct_vm.warp("2035-01-01T00:00:00Z")
+    warp_later(direct_vm, 7200)  # past the 3600s maturation delay
     direct_vm.sender = direct_alice
     direct_vm.value = HIGH_BOND
-    tid = c.propose_treaty(bob, "TRADE_CORRIDOR", "big", 4_000_000_000, params_for("TRADE_CORRIDOR"))
+    tid = c.propose_treaty(bob, "TRADE_CORRIDOR", "big", future_expiry(),
+                           params_for("TRADE_CORRIDOR"), ORACLE_P, ORACLE_S)
     direct_vm.value = 0
     assert c.get_treaty(tid)["status"] == "PROPOSED"
 
@@ -170,7 +170,7 @@ def test_strict_solvency_accounting(direct_vm, direct_deploy, direct_alice, dire
     mock_verdict(direct_vm, "CRITICAL_BREACH")
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    c.trigger_dispute(tid_ab, "breach", "ipfs://e", "hss1", "https://p/x", "https://s/y")
+    c.trigger_dispute(tid_ab, "breach", "ipfs://e", "hss1")
     direct_vm.value = 0
 
     deposits = 3 * COLLATERAL + 4 * BOND + MIN_DISPUTE

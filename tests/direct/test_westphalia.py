@@ -7,16 +7,15 @@ by integration tests. Pure-ASCII.
 
 from conftest import (
     CONTRACT,
-    ATTO,
     BOND,
     MIN_DISPUTE,
     COLLATERAL,
-    addr_hex,
     khex,
+    future_expiry,
     active_treaty,
     add_treaty,
-    found,
     fund,
+    propose,
     mock_telemetry,
     mock_verdict,
     params_for,
@@ -35,7 +34,7 @@ def test_injection_resistance(direct_vm, direct_deploy, direct_alice, direct_bob
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    verdict = c.trigger_dispute(tid, jailbreak, "ipfs://ev", "h1", "https://telemetry.example/x")
+    verdict = c.trigger_dispute(tid, jailbreak, "ipfs://ev", "h1")
     direct_vm.value = 0
 
     assert verdict == "NORMAL"
@@ -53,18 +52,18 @@ def test_unauthorized_and_unratified(direct_vm, direct_deploy, direct_alice, dir
     direct_vm.sender = direct_charlie
     direct_vm.value = MIN_DISPUTE
     with direct_vm.expect_revert("ERR_UNAUTHORIZED_PARTY"):
-        c.trigger_dispute(tid, "x", "ipfs://e", "h", "https://t/x")
+        c.trigger_dispute(tid, "x", "ipfs://e", "h")
     direct_vm.value = 0
 
     # Unratified (still PROPOSED) treaty.
-    direct_vm.sender = direct_alice
-    direct_vm.value = BOND
-    tid2 = c.propose_treaty(khex(c, direct_vm, direct_bob), "TRADE_CORRIDOR", "terms", 4_000_000_000, params_for("TRADE_CORRIDOR"))
-    direct_vm.value = 0
+    tid2 = propose(
+        c, direct_vm, direct_alice, khex(c, direct_vm, direct_bob),
+        "TRADE_CORRIDOR", "terms", future_expiry(), params_for("TRADE_CORRIDOR"),
+    )
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     with direct_vm.expect_revert("ERR_TREATY_NOT_ACTIVE"):
-        c.trigger_dispute(tid2, "x", "ipfs://e", "h", "https://t/x")
+        c.trigger_dispute(tid2, "x", "ipfs://e", "h")
     direct_vm.value = 0
 
 
@@ -82,7 +81,7 @@ def test_malicious_report_slashes_bond(direct_vm, direct_deploy, direct_alice, d
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    verdict = c.trigger_dispute(tid, "fabricated breach", "ipfs://e", "h3", "https://t/x")
+    verdict = c.trigger_dispute(tid, "fabricated breach", "ipfs://e", "h3")
     direct_vm.value = 0
 
     assert verdict == "MALICIOUS_REPORT"
@@ -103,7 +102,7 @@ def test_solvency_and_pull_settlement(direct_vm, direct_deploy, direct_alice, di
     mock_verdict(direct_vm, "CRITICAL_BREACH")
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    verdict = c.trigger_dispute(tid, "verified breach", "ipfs://e", "h4", "https://t/x")
+    verdict = c.trigger_dispute(tid, "verified breach", "ipfs://e", "h4")
     direct_vm.value = 0
     assert verdict == "CRITICAL_BREACH"
 
@@ -144,7 +143,7 @@ def test_boundary_quantization(direct_vm, direct_deploy, direct_alice, direct_bo
     mock_verdict(direct_vm, "CRITICAL_BREACH")
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    v1 = c.trigger_dispute(tid2, "boundary", "ipfs://e", "hb1", "https://t/x")
+    v1 = c.trigger_dispute(tid2, "boundary", "ipfs://e", "hb1")
     direct_vm.value = 0
     assert v1 == "CRITICAL_BREACH"
 
@@ -154,7 +153,7 @@ def test_boundary_quantization(direct_vm, direct_deploy, direct_alice, direct_bo
     mock_verdict(direct_vm, "ELEVATED_RISK")
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    v2 = c.trigger_dispute(tid1, "boundary", "ipfs://e", "hb2", "https://t/x")
+    v2 = c.trigger_dispute(tid1, "boundary", "ipfs://e", "hb2")
     direct_vm.value = 0
     assert v2 == "ELEVATED_RISK"
 
@@ -171,13 +170,12 @@ def test_transient_fault(direct_vm, direct_deploy, direct_alice, direct_bob):
     direct_vm.value = MIN_DISPUTE
     # Transient oracle failure reverts the whole tx (bond refunded, no corruption).
     with direct_vm.expect_revert("[TRANSIENT]"):
-        c.trigger_dispute(tid, "x", "ipfs://e", "h6", "https://t/x")
+        c.trigger_dispute(tid, "x", "ipfs://e", "h6")
     direct_vm.value = 0
 
-    # State intact: treaty still ACTIVE, no dangling dispute.
+    # State intact: treaty still ACTIVE.
     t = c.get_treaty(tid)
     assert t["status"] == "ACTIVE"
-    assert t["active_dispute"] is False
 
 
 # --- Case 7: Malformed LLM output failover ----------------------------------
@@ -192,7 +190,7 @@ def test_llm_failover(direct_vm, direct_deploy, direct_alice, direct_bob):
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     with direct_vm.expect_revert("[LLM_ERROR]"):
-        c.trigger_dispute(tid, "x", "ipfs://e", "h7", "https://t/x")
+        c.trigger_dispute(tid, "x", "ipfs://e", "h7")
     direct_vm.value = 0
 
     t = c.get_treaty(tid)
@@ -209,25 +207,26 @@ def test_replay_rejection(direct_vm, direct_deploy, direct_alice, direct_bob):
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    c.trigger_dispute(tid, "first", "ipfs://e", "same-hash", "https://t/x")
+    c.trigger_dispute(tid, "first", "ipfs://e", "same-hash")
     direct_vm.value = 0
 
     # Identical treaty + plaintiff + evidence_hash -> deterministic revert.
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     with direct_vm.expect_revert("ERR_REPLAY_DISPUTE"):
-        c.trigger_dispute(tid, "second", "ipfs://e", "same-hash", "https://t/x")
+        c.trigger_dispute(tid, "second", "ipfs://e", "same-hash")
     direct_vm.value = 0
 
 
 # --- Case 9: Guarded bond recovery + expiry warp ----------------------------
 def test_guarded_bond_recovery(direct_vm, direct_deploy, direct_alice, direct_bob):
     c = direct_deploy(CONTRACT)
+    # Warp back so the short expiry below is in the future at proposal time.
+    direct_vm.warp("2023-01-01T00:00:00Z")
     # Short expiry so we can warp past it.
-    tid = active_treaty(c, direct_vm, direct_alice, direct_bob, expires_at=1_700_000_100)
+    tid = active_treaty(c, direct_vm, direct_alice, direct_bob, expires_at=1_700_100_000)
 
     # Attempt recovery while ACTIVE and not expired -> revert.
-    direct_vm.warp("2023-01-01T00:00:00Z")
     direct_vm.sender = direct_alice
     with direct_vm.expect_revert("ERR_NOT_EXPIRED"):
         c.recover_bond(tid)
