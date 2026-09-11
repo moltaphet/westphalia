@@ -245,6 +245,12 @@ collateral-exit gate locked on open treaty bonds.
   0.29.x harness cannot decode the v0.3 calldata format), e.g.
   `uv venv --python 3.12 && uv pip install --prerelease=allow
   "genlayer-test==0.30.0rc2"`.
+- Agent tests: `pytest agent/` -> **23 passed**, covering the negotiation
+  scorer (`test_decider.py`), the deterministic telemetry arithmetic asserted
+  against the contract's own constants (`test_telemetry.py`), and verdict
+  extraction from the transaction (`test_chain.py`), whose fixtures are built
+  from two real observed payloads - an agreed return and the
+  `ERR_INSUFFICIENT_BOND` revert that a stale dispute bond produces.
 - V2/V3 protocol: dual independent telemetry feeds with a deterministic >5%
   divergence check that forces `MALICIOUS_REPORT`; typed per-kind treaty
   parameter schemas (non-aggression / trade-corridor / data-sharing) with
@@ -271,15 +277,13 @@ collateral-exit gate locked on open treaty bonds.
   inet_aton semantics and checked against every private/reserved range.
   Additionally, `drain_reserves` gives the deployer-keyed governor a
   treasury exit for accumulated reserves.
-- Deployment: the contract **compiles on GenLayer Studio Devnet** (the deploy
-  transaction reached the fee/consensus stage). Finalizing a fresh deployment is
-  currently blocked on deployer funding: every keystore account holds 0 GEN on
-  studio-dev and the Studio faucet did not credit within the polling window, so
-  the fee-bearing deploy transaction reverts with `FeeValueMustBeNonZero`. Once
-  a funded key is available, run:
-  `genlayer deploy --contract contracts/westphalia.py --fee-value <wei>` and
-  paste the resulting address into `frontend/lib/networks.ts`
-  (`DIPLOMATIC_CONTRACT_ADDRESS`).
+- Deployment: live on GenLayer Studio Devnet at
+  `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3` (chain 61997), recorded in
+  `deployments/studio-dev.json`. GenVM is not an EVM chain, so `eth_getCode`
+  returns `0x` even for a live contract and cannot be used to compare deployed
+  bytecode against source; the deployment is evidenced instead by live view
+  reads - `get_protocol_overview` answers from that address and reports
+  `solvent: true`, with the tracked component sums equalling `balance`.
 
 ## Contract Interaction Guidelines
 
@@ -317,3 +321,18 @@ Explorer: https://explorer-studio-dev.genlayer.com
 - The WebGL board is code-split behind a `dynamic(..., { ssr: false })` import,
   keeping the initial payload light and avoiding server canvas rendering.
 - All UI labels, code, variables, and comments are pure ASCII English.
+- Live end-to-end run on Studio Devnet against
+  `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`, with fresh identities and every
+  figure below read back from the chain afterwards. Run it with
+  `.venv/bin/python -m agent.demo --fresh` (see `agent/README.md`).
+  Two agents founded enclaves, negotiated a `DATA_SHARING` treaty across a
+  rejected first proposal (700 GEN / 7d / 9500 / 800, refused with four
+  enumerated charter violations) and a compliant second (500 GEN / 63d / 9950 /
+  300, accepted at score 0.86), then litigated it. Alice filed a dispute against
+  the treaty-bound oracles, the validators reached equivalence on
+  `CRITICAL_BREACH`, and the contract settled: the treaty went `SETTLED`,
+  Halcyon's reputation moved 50 -> 65 with 1500 GEN credited to its claimable
+  balance, and Meridian was `SANCTIONED` with its reputation zeroed. The
+  post-run `get_protocol_overview` read `solvent: true` with
+  `300 + 700 + 0 + 1500 == 2500 GEN` balance, so the accounting identity held
+  across real native value movement rather than a simulated ledger.
