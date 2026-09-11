@@ -38,6 +38,9 @@ interface Props {
   onSelectTreaty: (id: string | null) => void;
   onFocusEnclave: (id: string) => void;
   onPropose: (partnerId: string, kind: TreatyKind, terms: string, bond: number) => void;
+  onRatify: (treatyId: string) => void;
+  onDissolve: (treatyId: string) => void;
+  onExit: (treatyId: string) => void;
   onDispute: (treatyId: string, evidence: string) => void;
   onClaim: (treatyId: string) => void;
   onOverlayChange: (open: boolean) => void;
@@ -135,6 +138,7 @@ function TreatyRow({
       : treaty.status === "breached"
       ? "text-red-400"
       : "text-slate-400";
+  const chainTag = treaty.chainId !== undefined ? ` [chain #${treaty.chainId}]` : "";
   return (
     <button
       onClick={onSelect}
@@ -150,11 +154,12 @@ function TreatyRow({
         </span>
         <span className={`text-[10px] font-bold uppercase ${statusColor}`}>
           {treaty.status}
+          {treaty.exitRequested ? " - EXIT PENDING" : ""}
         </span>
       </div>
       <span className="text-[11px] text-slate-200">{names}</span>
       <span className="text-[10px] tabular-nums text-cyan-300">
-        bond {treaty.bondGen.toLocaleString("en-US")} GEN
+        bond {treaty.bondGen.toLocaleString("en-US")} GEN{chainTag}
       </span>
     </button>
   );
@@ -166,12 +171,20 @@ function Dossier({
   selectedTreaty,
   collapsed,
   onSelectTreaty,
+  onRatify,
+  onDissolve,
+  onExit,
+  onDispute,
 }: {
   state: ProtocolState;
   selectedId: string | null;
   selectedTreaty: string | null;
   collapsed: boolean;
   onSelectTreaty: (id: string | null) => void;
+  onRatify: (treatyId: string) => void;
+  onDissolve: (treatyId: string) => void;
+  onExit: (treatyId: string) => void;
+  onDispute: (treatyId: string) => void;
 }) {
   const sov: AgentEnclave | null =
     state.enclaves.find((s) => s.id === selectedId) ?? null;
@@ -184,7 +197,7 @@ function Dossier({
 
   return (
     <div
-      className={`pointer-events-none absolute right-4 top-24 flex h-[calc(100vh-6.5rem)] w-[344px] flex-col gap-3 transition-all duration-300 ease-in-out ${
+      className={`pointer-events-none absolute right-4 top-24 hidden h-[calc(100vh-6.5rem)] w-[344px] md:flex flex-col gap-3 transition-all duration-300 ease-in-out ${
         collapsed ? "translate-x-[372px] opacity-0" : "translate-x-0 opacity-100"
       }`}
     >
@@ -317,6 +330,56 @@ function Dossier({
                     <span>block: {treaty.createdBlock}</span>
                     <span>bond: {treaty.bondGen.toLocaleString("en-US")} GEN</span>
                   </div>
+                  {/* Treaty lifecycle actions: ratify a pending pact, sign
+                      amicable dissolution, or register/execute a unilateral
+                      exit (P2 anti-hostage path). */}
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    {treaty.status === "pending" && (
+                      <button
+                        onClick={() => onRatify(treaty.id)}
+                        disabled={treaty.chainId === undefined}
+                        title={
+                          treaty.chainId === undefined
+                            ? "Simulated treaty: no on-chain counterpart"
+                            : "Lock the matching bond and activate the treaty"
+                        }
+                        className="rounded border border-emerald-500/50 bg-emerald-500/15 py-1.5 text-[10px] font-bold tracking-widest text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40"
+                      >
+                        RATIFY
+                      </button>
+                    )}
+                    {(treaty.status === "active" || treaty.status === "pending") && (
+                      <button
+                        onClick={() => onDissolve(treaty.id)}
+                        className="rounded border border-cyan-500/50 bg-cyan-500/15 py-1.5 text-[10px] font-bold tracking-widest text-cyan-200 hover:bg-cyan-500/25"
+                      >
+                        SIGN DISSOLVE
+                      </button>
+                    )}
+                    {treaty.status === "active" && (
+                      <>
+                        <button
+                          onClick={() => onExit(treaty.id)}
+                          className="rounded border border-amber-500/50 bg-amber-500/15 py-1.5 text-[10px] font-bold tracking-widest text-amber-200 hover:bg-amber-500/25"
+                        >
+                          {treaty.exitRequested ? "EXECUTE EXIT" : "UNILATERAL EXIT"}
+                        </button>
+                        <button
+                          onClick={() => onDispute(treaty.id)}
+                          className="rounded border border-red-500/50 bg-red-500/15 py-1.5 text-[10px] font-bold tracking-widest text-red-200 hover:bg-red-500/25"
+                        >
+                          DISPUTE
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {treaty.status === "active" && (
+                    <p className="mt-1.5 text-[9px] leading-relaxed text-slate-500">
+                      Exit carries a 10% bond penalty to protocol reserves after a
+                      3-day notice window; the counterparty keeps dispute standing
+                      during the notice.
+                    </p>
+                  )}
                   {treaty.dispute && (
                     <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-2">
                       <div className="text-[10px] tracking-widest text-amber-300">
@@ -682,7 +745,8 @@ function ProposeModal({
       </Field>
       <button
         onClick={() => onSubmit(partner, kind, terms, bond)}
-        className="mt-2 w-full rounded border border-emerald-500/50 bg-emerald-500/15 py-2 text-[12px] font-bold tracking-widest text-emerald-200 hover:bg-emerald-500/25"
+        disabled={!partner || !Number.isFinite(bond) || bond <= 0}
+        className="mt-2 w-full rounded border border-emerald-500/50 bg-emerald-500/15 py-2 text-[12px] font-bold tracking-widest text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40"
       >
         LOCK BOND AND PROPOSE
       </button>
@@ -772,6 +836,9 @@ export default function HudOverlay({
   onSelectTreaty,
   onFocusEnclave,
   onPropose,
+  onRatify,
+  onDissolve,
+  onExit,
   onDispute,
   onClaim,
   onOverlayChange,
@@ -792,7 +859,9 @@ export default function HudOverlay({
     (t) => t.status === "active" || t.status === "pending"
   );
 
-  // Tactical hotkeys: P propose, D dispute, C claim, Escape closes overlays.
+  // Tactical hotkeys: C propose, D dispute, E claim, Escape closes overlays.
+  // Letter keys are ignored while any overlay is open so they never swap the
+  // active modal underneath the user.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -802,6 +871,7 @@ export default function HudOverlay({
         setAuditEvent(null);
         return;
       }
+      if (modal !== null || auditEvent !== null) return;
       const k = e.key.toLowerCase();
       if (k === "c") setModal("propose");
       else if (k === "d") setModal("dispute");
@@ -809,7 +879,7 @@ export default function HudOverlay({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [modal, auditEvent]);
 
   return (
     <>
@@ -820,7 +890,7 @@ export default function HudOverlay({
         {/* Left column: directory, feed, and docked legend stacked vertically
             so nothing overlaps. Slides out under cinematic / collapse. */}
         <div
-          className={`pointer-events-none absolute left-4 top-24 flex h-[calc(100vh-6.5rem)] w-[320px] flex-col gap-2 transition-all duration-300 ease-in-out ${
+          className={`pointer-events-none absolute left-4 top-24 hidden h-[calc(100vh-6.5rem)] w-[320px] md:flex flex-col gap-2 transition-all duration-300 ease-in-out ${
             leftCollapsed ? "-translate-x-[360px] opacity-0" : "translate-x-0 opacity-100"
           }`}
         >
@@ -838,7 +908,7 @@ export default function HudOverlay({
         <button
           onClick={onToggleLeft}
           title={leftCollapsed ? "Show treaty feed" : "Hide treaty feed"}
-          className={`pointer-events-auto absolute top-1/2 z-20 flex h-12 w-6 -translate-y-1/2 items-center justify-center rounded-r border border-slate-700/60 bg-slate-900/90 text-slate-300 shadow-hud backdrop-blur-md transition-all duration-300 ease-in-out hover:text-cyan-300 ${
+          className={`pointer-events-auto absolute top-1/2 z-20 hidden h-12 w-6 -translate-y-1/2 md:flex items-center justify-center rounded-r border border-slate-700/60 bg-slate-900/90 text-slate-300 shadow-hud backdrop-blur-md transition-all duration-300 ease-in-out hover:text-cyan-300 ${
             leftCollapsed ? "left-0" : "left-[332px]"
           }`}
         >
@@ -851,13 +921,19 @@ export default function HudOverlay({
           selectedTreaty={selectedTreaty}
           collapsed={rightCollapsed}
           onSelectTreaty={onSelectTreaty}
+          onRatify={onRatify}
+          onDissolve={onDissolve}
+          onExit={onExit}
+          onDispute={(id) => {
+            onDispute(id, `ipfs://evidence/${id}`);
+          }}
         />
 
         {/* Persistent right toggle for the dossier. */}
         <button
           onClick={onToggleRight}
           title={rightCollapsed ? "Show dossier" : "Hide dossier"}
-          className={`pointer-events-auto absolute top-1/2 z-20 flex h-12 w-6 -translate-y-1/2 items-center justify-center rounded-l border border-slate-700/60 bg-slate-900/90 text-slate-300 shadow-hud backdrop-blur-md transition-all duration-300 ease-in-out hover:text-cyan-300 ${
+          className={`pointer-events-auto absolute top-1/2 z-20 hidden h-12 w-6 -translate-y-1/2 md:flex items-center justify-center rounded-l border border-slate-700/60 bg-slate-900/90 text-slate-300 shadow-hud backdrop-blur-md transition-all duration-300 ease-in-out hover:text-cyan-300 ${
             rightCollapsed ? "right-0" : "right-[356px]"
           }`}
         >

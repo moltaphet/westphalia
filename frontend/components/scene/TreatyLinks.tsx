@@ -24,14 +24,28 @@ export default function TreatyLinks({
   selectedTreaty,
   onSelectTreaty,
 }: Props) {
+  // Memoized endpoint vectors so hover-driven board re-renders never rebuild
+  // the treaty curves (each rebuild reconstructs every tube geometry).
   const byId = useMemo(() => {
     const m = new Map<string, IslandLayout>();
     for (const l of layouts) m.set(l.id, l);
     return m;
   }, [layouts]);
 
-  const top = (l: IslandLayout) =>
-    new THREE.Vector3(l.center[0] * TILE, islandTopY(l.floatY) + 2.55, l.center[1] * TILE);
+  const tops = useMemo(() => {
+    const m = new Map<string, THREE.Vector3>();
+    for (const l of layouts) {
+      m.set(
+        l.id,
+        new THREE.Vector3(
+          l.center[0] * TILE,
+          islandTopY(l.floatY) + 2.55,
+          l.center[1] * TILE
+        )
+      );
+    }
+    return m;
+  }, [layouts]);
 
   return (
     <group>
@@ -39,7 +53,9 @@ export default function TreatyLinks({
         if (t.status === "resolved") return null; // only alliances + disputes
         const la = byId.get(t.parties[0]);
         const lb = byId.get(t.parties[1]);
-        if (!la || !lb) return null;
+        const a = tops.get(t.parties[0]);
+        const b = tops.get(t.parties[1]);
+        if (!la || !lb || !a || !b) return null;
 
         // Sleek tactical palette: emerald alliance, electric cyan trade,
         // focused amber for links under active review.
@@ -57,8 +73,8 @@ export default function TreatyLinks({
         return (
           <TreatyArc
             key={t.id}
-            a={top(la)}
-            b={top(lb)}
+            a={a}
+            b={b}
             color={color}
             selected={t.id === selectedTreaty}
             opacity={opacity}

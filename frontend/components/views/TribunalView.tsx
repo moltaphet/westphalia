@@ -43,9 +43,9 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
   const audit = selected ? auditForEvent(selected) : null;
 
   return (
-    <div className="custom-scrollbar pointer-events-auto absolute left-0 right-0 top-24 z-20 flex h-[calc(100vh-6.5rem)] items-start gap-4 overflow-y-auto px-8 py-6 pb-20 font-mono">
+    <div className="custom-scrollbar pointer-events-auto absolute left-0 right-0 top-24 z-20 flex h-[calc(100vh-6.5rem)] flex-col items-start gap-4 overflow-y-auto px-8 py-6 pb-20 font-mono lg:flex-row">
       {/* Docket */}
-      <div className="w-[300px] shrink-0 rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
+      <div className="w-full shrink-0 rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md lg:w-[300px]">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Gavel size={15} className="text-violet-400" />
           <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">DOCKET</span>

@@ -8,18 +8,10 @@ import type { AgentEnclave } from "@/lib/types";
 import type { IslandLayout } from "@/lib/world";
 import { generateIslandTiles, islandTopY, TILE } from "@/lib/world";
 import { VOXEL_H, STATUS_COLOR, STATUS_LABEL } from "@/lib/board";
-import Citadel, { type CrestKind } from "./scene/Citadel";
+import Citadel from "./scene/Citadel";
 import DisputeDome from "./scene/DisputeDome";
 import ContainmentGrid from "./scene/ContainmentGrid";
-import type { Archetype } from "@/lib/types";
-
-// Holographic crest geometry keyed to sovereign archetype.
-const CREST_BY_ARCHETYPE: Record<Archetype, CrestKind> = {
-  "Oracle Collective": "octahedron",
-  "Liquidity Nexus": "icosahedron",
-  "Autonomous Arbiter": "torus",
-  "Defense Vanguard": "spiked",
-};
+import TreatyMotes from "./scene/TreatyMotes";
 
 interface Props {
   enclave: AgentEnclave;
@@ -82,6 +74,17 @@ export default function ProceduralIsland({
     [tiles, cx, cz, layout.floatY, layout.radius, enclave.biomeTheme, status]
   );
 
+  // Pre-brightened colors for the selected/hovered state, so the render body
+  // never clones a THREE.Color per tile per frame.
+  const brightened = useMemo(
+    () => terrain.map((t) => t.color.clone().multiplyScalar(1.4)),
+    [terrain]
+  );
+  const keelColor = useMemo(
+    () => new THREE.Color(enclave.biomeTheme.base).multiplyScalar(0.35),
+    [enclave.biomeTheme.base]
+  );
+
   const runes = useMemo(() => terrain.filter((t) => t.rune), [terrain]);
   const baseY = islandTopY(layout.floatY);
 
@@ -130,7 +133,7 @@ export default function ProceduralIsland({
       <mesh position={[cx * TILE, layout.floatY - 1.6, cz * TILE]} rotation={[Math.PI, 0, 0]}>
         <coneGeometry args={[layout.radius * 0.85, 4.2, 6]} />
         <meshStandardMaterial
-          color={new THREE.Color(enclave.biomeTheme.base).multiplyScalar(0.35)}
+          color={keelColor}
           roughness={0.9}
           flatShading
         />
@@ -149,12 +152,12 @@ export default function ProceduralIsland({
       <Instances limit={terrain.length} range={terrain.length} castShadow receiveShadow>
         <boxGeometry args={[TILE * 0.96, 1, TILE * 0.96]} />
         <meshStandardMaterial roughness={0.45} metalness={0.35} />
-        {terrain.map((t) => (
+        {terrain.map((t, i) => (
           <Instance
             key={t.key}
             position={[t.x, t.y + (active ? 0.2 : 0), t.z]}
             scale={[1, t.h, 1]}
-            color={active ? t.color.clone().multiplyScalar(1.4) : t.color}
+            color={active ? brightened[i] : t.color}
             onPointerOver={(e) => {
               e.stopPropagation();
               onHover(enclave.id);
@@ -188,46 +191,89 @@ export default function ProceduralIsland({
         id={enclave.id}
         tint={enclave.biomeTheme.accent}
         statusColor={statusColor}
-        crest={CREST_BY_ARCHETYPE[enclave.archetype]}
+        archetype={enclave.archetype}
         position={[cx * TILE, cz * TILE]}
         baseY={baseY}
         active={active}
+        reputation={enclave.reputation}
         onHover={onHover}
         onSelect={onSelect}
+      />
+      {/* One orbiting mote per active treaty */}
+      <TreatyMotes
+        count={enclave.treaties.length}
+        color={statusColor}
+        center={[cx * TILE, cz * TILE]}
+        baseY={baseY}
       />
       {status === "Contested" && (
         <DisputeDome position={[cx * TILE, cz * TILE]} baseY={baseY} nodes={enclave.treaties.length + 3} />
       )}
       {status === "Slashed" && <ContainmentGrid position={[cx * TILE, cz * TILE]} baseY={baseY} />}
 
-      {/* Floating label with sector hazard. Suppressed while a modal is open,
-          and clamped to a low zIndexRange so Drei never emits huge inline
-          z-indexes that bleed over HUD overlays and modals. */}
+      {/* Sovereignty nameplate: a leader line rises from the citadel crest to
+          a floating chip positioned clearly ABOVE the agent's head, so names
+          never visually merge with the island geometry. */}
       {showLabel && (
-        <Html
-          center
-          distanceFactor={20}
-          position={[cx * TILE, baseY + 4.4, cz * TILE]}
-          pointerEvents="none"
-          zIndexRange={[0, 10]}
-        >
-          <div
-            style={{
-              fontFamily: "ui-monospace, monospace",
-              whiteSpace: "nowrap",
-              textAlign: "center",
-              userSelect: "none",
-              pointerEvents: "none",
-            }}
+        <>
+          <mesh position={[cx * TILE, baseY + 5.15, cz * TILE]}>
+            <cylinderGeometry args={[0.015, 0.015, 1.0, 6]} />
+            <meshBasicMaterial
+              color={statusColor}
+              transparent
+              opacity={active ? 0.85 : 0.5}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh position={[cx * TILE, baseY + 5.65, cz * TILE]} rotation={[0, Math.PI / 4, 0]}>
+            <planeGeometry args={[0.12, 0.12]} />
+            <meshBasicMaterial
+              color={statusColor}
+              transparent
+              opacity={active ? 0.95 : 0.7}
+              depthWrite={false}
+            />
+          </mesh>
+          <Html
+            center
+            distanceFactor={20}
+            position={[cx * TILE, baseY + 6.35, cz * TILE]}
+            pointerEvents="none"
+            zIndexRange={[0, 10]}
           >
-            <div style={{ fontSize: 9, letterSpacing: 2, color: statusColor, textShadow: `0 0 8px ${statusColor}` }}>
-              {enclave.name.toUpperCase()}
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                whiteSpace: "nowrap",
+                textAlign: "center",
+                userSelect: "none",
+                pointerEvents: "none",
+                background: "rgba(9, 9, 11, 0.78)",
+                border: `1px solid ${statusColor}66`,
+                borderRadius: 4,
+                padding: "4px 9px",
+                boxShadow: `0 0 12px ${statusColor}33`,
+                backdropFilter: "blur(2px)",
+                opacity: active ? 1 : 0.92,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: 2,
+                  color: statusColor,
+                  textShadow: `0 0 8px ${statusColor}`,
+                }}
+              >
+                {enclave.name.toUpperCase()}
+              </div>
+              <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: 1, marginTop: 2 }}>
+                {STATUS_LABEL[status]} - HAZARD {enclave.hazardPct}%
+              </div>
             </div>
-            <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: 1 }}>
-              {STATUS_LABEL[status]} - HAZARD {enclave.hazardPct}%
-            </div>
-          </div>
-        </Html>
+          </Html>
+        </>
       )}
     </group>
   );

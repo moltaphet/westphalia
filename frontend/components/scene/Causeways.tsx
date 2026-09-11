@@ -20,6 +20,8 @@ function Causeway({
   broken: boolean;
 }) {
   const particles = useRef<THREE.Group>(null);
+  // Reused getPoint target: no per-frame Vector3 allocation in the hot loop.
+  const pt = useRef(new THREE.Vector3());
 
   const curve = useMemo(() => {
     const mid = from.clone().add(to).multiplyScalar(0.5);
@@ -33,42 +35,47 @@ function Causeway({
     particles.current.children.forEach((child, i) => {
       let phase = (t * 0.28 + i / particles.current!.children.length) % 1;
       if (broken && phase > 0.42 && phase < 0.58) phase = 0.42;
-      child.position.copy(curve.getPoint(phase));
+      child.position.copy(curve.getPoint(phase, pt.current));
     });
   });
 
+  // Deck sub-curves memoized: recreating them in the render body would give
+  // tubeGeometry new args on every re-render and rebuild every tube.
   const deck = useMemo(() => {
-    if (!broken) return [{ t0: 0, t1: 1 }];
-    return [
-      { t0: 0, t1: 0.42 },
-      { t0: 0.58, t1: 1 },
-    ];
-  }, [broken]);
+    const segment = (t0: number, t1: number) => {
+      const mid = curve.getPoint((t0 + t1) / 2).add(new THREE.Vector3(0, 0.3, 0));
+      return new THREE.QuadraticBezierCurve3(
+        curve.getPoint(t0),
+        mid,
+        curve.getPoint(t1)
+      );
+    };
+    if (!broken) return [segment(0, 1)];
+    return [segment(0, 0.42), segment(0.58, 1)];
+  }, [curve, broken]);
+
+  const breakPoint = useMemo(
+    () => (broken ? curve.getPoint(0.5) : null),
+    [broken, curve]
+  );
 
   return (
     <group>
-      {deck.map((seg, i) => {
-        const sub = new THREE.QuadraticBezierCurve3(
-          curve.getPoint(seg.t0),
-          curve.getPoint((seg.t0 + seg.t1) / 2).add(new THREE.Vector3(0, 0.3, 0)),
-          curve.getPoint(seg.t1)
-        );
-        return (
-          <mesh key={i}>
-            <tubeGeometry args={[sub, 24, 0.06, 8, false]} />
-            <meshStandardMaterial
-              color={color}
-              emissive={color}
-              emissiveIntensity={broken ? 1.2 : 2}
-              transparent
-              opacity={0.85}
-            />
-          </mesh>
-        );
-      })}
+      {deck.map((sub, i) => (
+        <mesh key={i}>
+          <tubeGeometry args={[sub, 24, 0.06, 8, false]} />
+          <meshStandardMaterial
+            color={color}
+            emissive={color}
+            emissiveIntensity={broken ? 1.2 : 2}
+            transparent
+            opacity={0.85}
+          />
+        </mesh>
+      ))}
 
-      {broken && (
-        <mesh position={curve.getPoint(0.5)}>
+      {breakPoint && (
+        <mesh position={breakPoint}>
           <icosahedronGeometry args={[0.18, 0]} />
           <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={3} wireframe />
         </mesh>
@@ -87,16 +94,29 @@ function Causeway({
 }
 
 export default function Causeways({ layouts }: { layouts: IslandLayout[] }) {
-  const hub = new THREE.Vector3(HUB.center[0] * TILE, islandTopY(HUB.floatY) - 0.4, HUB.center[1] * TILE);
+  // Memoized so hover-driven board re-renders never rebuild the hub vector or
+  // the per-island endpoints (each change would rebuild every curve + tube).
+  const hub = useMemo(
+    () => new THREE.Vector3(HUB.center[0] * TILE, islandTopY(HUB.floatY) - 0.4, HUB.center[1] * TILE),
+    []
+  );
+  const endpoints = useMemo(
+    () =>
+      layouts.map((l) => ({
+        layout: l,
+        to: new THREE.Vector3(l.center[0] * TILE, islandTopY(l.floatY) - 0.4, l.center[1] * TILE),
+      })),
+    [layouts]
+  );
   return (
     <group>
-      {layouts.map((l) => (
+      {endpoints.map(({ layout, to }) => (
         <Causeway
-          key={l.id}
+          key={layout.id}
           from={hub}
-          to={new THREE.Vector3(l.center[0] * TILE, islandTopY(l.floatY) - 0.4, l.center[1] * TILE)}
-          color={l.broken ? "#ef4444" : l.palette.accent}
-          broken={l.broken}
+          to={to}
+          color={layout.broken ? "#ef4444" : layout.palette.accent}
+          broken={layout.broken}
         />
       ))}
     </group>

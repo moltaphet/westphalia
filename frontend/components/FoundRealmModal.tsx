@@ -103,7 +103,11 @@ export default function FoundRealmModal({
 
           <button
             onClick={() => onSubmit({ name, archetype, collateral, governance })}
-            disabled={!name.trim() || collateral <= 0}
+            disabled={
+              !name.trim() ||
+              !Number.isFinite(collateral) ||
+              collateral <= 0
+            }
             className="mt-1 w-full rounded border border-emerald-500/50 bg-emerald-500/15 py-2.5 text-[12px] font-bold tracking-widest text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40"
           >
             DEPLOY SOVEREIGNTY TO ORBIT

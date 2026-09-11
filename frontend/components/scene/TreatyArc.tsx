@@ -25,6 +25,8 @@ export default function TreatyArc({
   onSelect: () => void;
 }) {
   const photons = useRef<THREE.Group>(null);
+  // Reused getPoint target: no per-photon Vector3 allocation per frame.
+  const pt = useRef(new THREE.Vector3());
 
   const curve = useMemo(() => {
     const mid = a.clone().add(b).multiplyScalar(0.5);
@@ -39,7 +41,7 @@ export default function TreatyArc({
     const n = photons.current.children.length;
     photons.current.children.forEach((child, i) => {
       const phase = (t * 0.28 + i / n) % 1;
-      child.position.copy(curve.getPoint(phase));
+      child.position.copy(curve.getPoint(phase, pt.current));
     });
   });
 

@@ -79,3 +79,83 @@ body {
   );
   animation: scan 6s linear infinite;
 }
+
+/* Staggered entrance for agent roster cards. Each card sets its own delay
+   via an inline style; the keyframe lifts + fades it into place. */
+.agent-enter {
+  opacity: 0;
+  animation: agent-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes agent-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Slow radar ping behind an agent's status dot. */
+.agent-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  animation: agent-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes agent-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  75%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* Horizontal telemetry sweep across a selected agent card. */
+.agent-sweep {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.agent-sweep::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(34, 211, 238, 0.1),
+    transparent
+  );
+  animation: agent-sweep 2.8s ease-in-out infinite;
+}
+@keyframes agent-sweep {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 110%;
+  }
+}
+
+/* Reputation bar fills from zero after entrance (delay set inline). */
+.rep-fill {
+  transform-origin: left;
+  animation: rep-fill 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes rep-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}

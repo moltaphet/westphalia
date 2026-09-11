@@ -25,6 +25,9 @@ export function networkByChainId(chainId: number): NetworkConfig | undefined {
   return NETWORKS.find((n) => n.chainId === chainId);
 }
 
-// Deployed diplomatic escrow contract address (placeholder for StudioNet).
+// Deployed diplomatic escrow contract address. Set via
+// NEXT_PUBLIC_DIPLOMATIC_CONTRACT_ADDRESS (e.g. in .env.local) so each
+// deployment is a config change, not a code change.
 export const DIPLOMATIC_CONTRACT_ADDRESS =
-  "0x5f0Ed7c9A2B1c3D4e5F60718293A4b5C6D7E8f90";
+  process.env.NEXT_PUBLIC_DIPLOMATIC_CONTRACT_ADDRESS ??
+  "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3";

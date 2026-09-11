@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentEnclave,
   Archetype,
   BiomeTheme,
+  ChainOverview,
   LedgerEvent,
   NetworkConfig,
   PipelineState,
@@ -45,12 +46,14 @@ export const ARCHETYPE_PRESETS: Record<
 };
 
 // Seed enclaves occupy Ring 1 (indices 0-3) around the Geneva core.
+// Addresses are valid 40-char hex (they are passed to the on-chain contract
+// as counterparty_hex, which decodes them via Address()).
 export const INITIAL_ENCLAVES: AgentEnclave[] = [
   {
     id: "alpha",
     name: "Citadel Alpha",
     archetype: "Oracle Collective",
-    address: "0xA1pha00c3D4e5F60718293A4b5C6D7E8f9012345",
+    address: "0xa1b2c3d4e5f60718293a4b5c6d7e8f9012345a1",
     collateral: 184500,
     reputation: 92,
     tier: "Sovereign",
@@ -71,7 +74,7 @@ export const INITIAL_ENCLAVES: AgentEnclave[] = [
     id: "vanguard",
     name: "Vanguard Nexus",
     archetype: "Liquidity Nexus",
-    address: "0xV4nguard5F60718293A4b5C6D7E8f9012345aBcD",
+    address: "0xb1c2d3e4f5061728394a5b6c7d8e9f0011223345",
     collateral: 152300,
     reputation: 87,
     tier: "Trusted",
@@ -92,7 +95,7 @@ export const INITIAL_ENCLAVES: AgentEnclave[] = [
     id: "enclave",
     name: "Sovereign Enclave",
     archetype: "Autonomous Arbiter",
-    address: "0xEncl4ve718293A4b5C6D7E8f9012345aBcDeF012",
+    address: "0xc1d2e3f405162738495a6b7c8d9e0f1122334455",
     collateral: 98750,
     reputation: 64,
     tier: "Neutral",
@@ -115,7 +118,7 @@ export const INITIAL_ENCLAVES: AgentEnclave[] = [
     id: "bastion",
     name: "Consensus Bastion",
     archetype: "Defense Vanguard",
-    address: "0xB4stion93A4b5C6D7E8f9012345aBcDeF0123456",
+    address: "0xd1e2f30415263748596a7b8c9d0e1f2233445566",
     collateral: 41200,
     reputation: 23,
     tier: "Rogue",
@@ -179,6 +182,7 @@ export function useWestphaliaStore() {
   const [reviewerMode, setReviewerMode] = useState(true);
   const [lastReceipt, setLastReceipt] = useState<TxReceipt | null>(null);
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
+  const [chainOverview, setChainOverview] = useState<ChainOverview | null>(null);
 
   const contractRef = useRef<DiplomaticContract>(new DiplomaticContract(network));
 
@@ -196,19 +200,71 @@ export function useWestphaliaStore() {
     setLedger((prev) => [{ ...ev, id: `l${seq++}` }, ...prev].slice(0, 48));
   }, []);
 
+  // Pull the on-chain overview (balances, solvency, next treaty id) whenever a
+  // live client is connected. Degrades to a no-op in reviewer mode.
+  const syncChainOverview = useCallback(async () => {
+    const ov = await contractRef.current.read<Record<string, unknown>>(
+      "get_protocol_overview"
+    );
+    if (!ov) return;
+    setChainOverview({
+      balance: String(ov.balance ?? "0"),
+      totalCollateral: String(ov.total_collateral ?? "0"),
+      lockedEscrow: String(ov.locked_escrow ?? "0"),
+      reserves: String(ov.reserves ?? "0"),
+      totalClaimable: String(ov.total_claimable ?? "0"),
+      nextTreatyId: String(ov.next_treaty_id ?? "1"),
+      solvent: Boolean(ov.solvent),
+    });
+  }, []);
+
+  // Rebind the contract client whenever the network changes, so a live
+  // connection follows the selected RPC instead of staying pinned to the
+  // chain it was originally opened against.
+  useEffect(() => {
+    const wasConnected = contractRef.current.connected;
+    const contract = new DiplomaticContract(network);
+    contractRef.current = contract;
+    if (!wasConnected) return;
+    void contract.connect().then((ok) => {
+      setConnected(ok);
+      setReviewerMode(!ok);
+      if (ok) void syncChainOverview();
+    });
+  }, [network, syncChainOverview]);
+
+  // Transaction pipeline: the on-chain call runs FIRST (step 0, while the UI
+  // shows "Signature Verified"); a revert aborts the animation and surfaces
+  // the error instead of faking success.
   const runPipeline = useCallback(
     async (label: string, finalize: () => Promise<void>) => {
       setPipeline({ active: true, label, step: 0, steps: PIPELINE_STEPS, done: false });
-      for (let i = 0; i < PIPELINE_STEPS.length; i++) {
+      try {
+        await finalize();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setPipeline({
+          active: true,
+          label,
+          step: 0,
+          steps: PIPELINE_STEPS,
+          done: true,
+          error: msg,
+        });
+        await sleep(2600);
+        setPipeline(null);
+        return;
+      }
+      for (let i = 1; i < PIPELINE_STEPS.length; i++) {
         setPipeline((p) => (p ? { ...p, step: i } : p));
         await sleep(i === 2 ? 1000 : 650);
       }
-      await finalize();
       setPipeline((p) => (p ? { ...p, step: PIPELINE_STEPS.length - 1, done: true } : p));
+      void syncChainOverview();
       await sleep(1000);
       setPipeline(null);
     },
-    []
+    [syncChainOverview]
   );
 
   // Selection / camera focus.
@@ -228,6 +284,7 @@ export function useWestphaliaStore() {
     const ok = await contract.connect();
     setConnected(ok);
     setReviewerMode(!ok);
+    if (ok) void syncChainOverview();
     pushLedger({
       block: 1843000 + seq,
       kind: "consensus-verdict",
@@ -236,7 +293,7 @@ export function useWestphaliaStore() {
         ? `Wallet linked to ${network.label}.`
         : `No wallet detected. Reviewer simulation active on ${network.label}.`,
     });
-  }, [network, pushLedger]);
+  }, [network, pushLedger, syncChainOverview]);
 
   const enterReviewerMode = useCallback(() => {
     setReviewerMode(true);
@@ -252,10 +309,33 @@ export function useWestphaliaStore() {
   const proposeTreaty = useCallback(
     async (partnerId: string, kind: TreatyKind, terms: string, bondGen: number) => {
       await runPipeline(`Propose ${kind} treaty`, async () => {
-        const receipt = await contractRef.current.proposeTreaty(partnerId, kind, terms, bondGen);
-        setLastReceipt(receipt);
         const self = selectedId ?? "alpha";
         const partner = enclaves.find((e) => e.id === partnerId);
+        // Oracle feeds are treaty-bound on-chain (V3): the proposer picks the
+        // telemetry sources, the counterparty inspects them before ratifying.
+        const oracle = `https://telemetry.westphalia.example/${partnerId}/metrics`;
+        const receipt = await contractRef.current.proposeTreaty(
+          {
+            counterpartyHex: partner?.address ?? partnerId,
+            kind,
+            terms,
+            // 90-day bounded expiry (the contract rejects 0 / unbounded).
+            expiresAt: BigInt(Math.floor(Date.now() / 1000) + 90 * 86400),
+            oraclePrimary: oracle,
+            // Independent second feed so adjudication has a cross-check.
+            oracleSecondary: `https://telemetry.westphalia.example/${partnerId}/metrics?feed=b`,
+          },
+          bondGen
+        );
+        setLastReceipt(receipt);
+        // Capture the on-chain treaty id: the contract's counter is
+        // next_treaty_id AFTER the write, so this proposal is counter - 1.
+        let chainTreatyId: number | undefined;
+        const ov = await contractRef.current.read<Record<string, unknown>>(
+          "get_protocol_overview"
+        );
+        const next = ov ? Number(ov.next_treaty_id) : NaN;
+        if (Number.isFinite(next) && next > 1) chainTreatyId = next - 1;
         const id = `t${seq}`;
         const treaty: Treaty = {
           id,
@@ -264,6 +344,7 @@ export function useWestphaliaStore() {
           parties: [self, partnerId],
           bondGen,
           createdBlock: 1843000 + seq,
+          chainId: chainTreatyId,
           terms,
         };
         setTreaties((prev) => [...prev, treaty]);
@@ -286,16 +367,112 @@ export function useWestphaliaStore() {
     [runPipeline, pushLedger, selectedId, enclaves]
   );
 
+  // Counterparty signs a pending treaty and locks its matching bond.
+  const ratifyTreaty = useCallback(
+    async (treatyId: string) => {
+      await runPipeline(`Ratify ${treatyId.toUpperCase()}`, async () => {
+        const t = treaties.find((x) => x.id === treatyId);
+        if (!t || t.chainId === undefined) return; // simulated treaties
+        const receipt = await contractRef.current.ratifyTreaty(
+          BigInt(t.chainId),
+          t.bondGen
+        );
+        setLastReceipt(receipt);
+        setTreaties((prev) =>
+          prev.map((x) => (x.id === treatyId ? { ...x, status: "active" } : x))
+        );
+        pushLedger({
+          block: 1843000 + seq,
+          kind: "treaty-signed",
+          actor: selectedId ?? "protocol",
+          message: `Treaty ${treatyId.toUpperCase()} ratified. Matching bond locked.`,
+          valueGen: t.bondGen,
+        });
+      });
+    },
+    [runPipeline, pushLedger, selectedId, treaties]
+  );
+
+  // Amicable mutual dissolution: both signatures refund both bonds intact.
+  const dissolveTreaty = useCallback(
+    async (treatyId: string) => {
+      await runPipeline(`Dissolve ${treatyId.toUpperCase()}`, async () => {
+        const t = treaties.find((x) => x.id === treatyId);
+        if (!t) return;
+        if (t.chainId !== undefined) {
+          const receipt = await contractRef.current.dissolveTreaty(BigInt(t.chainId));
+          setLastReceipt(receipt);
+        }
+        setTreaties((prev) =>
+          prev.map((x) => (x.id === treatyId ? { ...x, status: "resolved" } : x))
+        );
+        pushLedger({
+          block: 1843000 + seq,
+          kind: "escrow-released",
+          actor: selectedId ?? "protocol",
+          message: `Dissolution signed for ${treatyId.toUpperCase()}. Bonds refund on both signatures.`,
+        });
+      });
+    },
+    [runPipeline, pushLedger, selectedId, treaties]
+  );
+
+  // Unilateral exit with penalty (P2 fix): first call registers the notice,
+  // second call (after the 3-day window) executes at 10% penalty to reserves.
+  const exitTreaty = useCallback(
+    async (treatyId: string) => {
+      await runPipeline(`Exit ${treatyId.toUpperCase()}`, async () => {
+        const t = treaties.find((x) => x.id === treatyId);
+        if (!t) return;
+        if (t.chainId !== undefined) {
+          const receipt = await contractRef.current.exitTreaty(BigInt(t.chainId));
+          setLastReceipt(receipt);
+        }
+        const alreadyRequested = t.exitRequested === true;
+        setTreaties((prev) =>
+          prev.map((x) =>
+            x.id === treatyId
+              ? alreadyRequested
+                ? { ...x, status: "resolved", exitRequested: false }
+                : { ...x, exitRequested: true }
+              : x
+          )
+        );
+        pushLedger({
+          block: 1843000 + seq,
+          kind: alreadyRequested ? "escrow-released" : "treaty-proposed",
+          actor: selectedId ?? "protocol",
+          message: alreadyRequested
+            ? `Unilateral exit executed on ${treatyId.toUpperCase()}. 10% penalty to reserves.`
+            : `Exit notice registered on ${treatyId.toUpperCase()}. Counterparty retains dispute standing for 3 days.`,
+        });
+      });
+    },
+    [runPipeline, pushLedger, selectedId, treaties]
+  );
+
   const triggerDispute = useCallback(
     async (treatyId: string, evidence: string) => {
       await runPipeline(`Dispute ${treatyId.toUpperCase()}`, async () => {
-        const receipt = await contractRef.current.triggerDispute(treatyId, evidence);
+        const t = treaties.find((x) => x.id === treatyId);
+        // V3: adjudication runs against the treaty-bound oracles; the caller
+        // supplies only the allegation and its evidence hash.
+        const bond = t
+          ? Math.max(500, Math.ceil(t.bondGen * 0.05))
+          : 500;
+        const receipt = await contractRef.current.triggerDispute(
+          BigInt(t?.chainId ?? 0),
+          evidence,
+          `ipfs://evidence/${treatyId}`,
+          `ev-${treatyId}-${Date.now()}`,
+          bond
+        );
         setLastReceipt(receipt);
         setTreaties((prev) =>
-          prev.map((t) =>
-            t.id === treatyId
+          prev.map((x) =>
+            x.id === treatyId
               ? {
-                  ...t,
+                  ...x,
                   status: "pending",
                   dispute: {
                     validators: 5,
@@ -304,52 +481,81 @@ export function useWestphaliaStore() {
                     openedBlock: 1843000 + seq,
                   },
                 }
-              : t
+              : x
           )
         );
         pushLedger({
           block: 1843000 + seq,
           kind: "dispute-opened",
           actor: selectedId ?? "protocol",
-          message: `Dispute opened on ${treatyId}. GenLayer validators empaneled.`,
+          message: `Dispute opened on ${treatyId.toUpperCase()}. GenLayer validators empaneled.`,
+        });
+      });
+    },
+    [runPipeline, pushLedger, selectedId, treaties]
+  );
+
+  const claimEscrow = useCallback(
+    async (treatyId: string) => {
+      await runPipeline(`Claim ${treatyId.toUpperCase()}`, async () => {
+        // claim_payout withdraws the caller's full claimable balance
+        // (pull-pattern), not a per-treaty amount.
+        const receipt = await contractRef.current.claimPayout();
+        setLastReceipt(receipt);
+        pushLedger({
+          block: 1843000 + seq,
+          kind: "escrow-released",
+          actor: selectedId ?? "protocol",
+          message: `Payout claimed via pull-pattern withdrawal (${treatyId.toUpperCase()} context).`,
         });
       });
     },
     [runPipeline, pushLedger, selectedId]
   );
 
-  const claimEscrow = useCallback(
-    async (treatyId: string) => {
-      const receipt = await contractRef.current.claimEscrow(treatyId);
+  // Sovereign exit: withdraw the caller's enclave collateral (the enclave
+  // is dissolved on-chain once its escrow obligations are clear).
+  const withdrawCollateral = useCallback(async () => {
+    await runPipeline("Withdraw sovereign collateral", async () => {
+      const receipt = await contractRef.current.withdrawCollateral();
       setLastReceipt(receipt);
       pushLedger({
         block: 1843000 + seq,
         kind: "escrow-released",
         actor: selectedId ?? "protocol",
-        message: `Escrow released for ${treatyId} via pull-pattern withdrawal.`,
+        message:
+          "Sovereign collateral withdrawal executed. Enclave dissolved and stake returned.",
       });
-    },
-    [pushLedger, selectedId]
-  );
+    });
+  }, [runPipeline, pushLedger, selectedId]);
 
   // Deploy a brand new sovereign enclave into the next orbital slot.
   const foundRealm = useCallback(
     async (input: FoundRealmInput) => {
       await runPipeline(`Found Sovereignty ${input.name}`, async () => {
-        const receipt = await contractRef.current.proposeTreaty(
+        const receipt = await contractRef.current.foundSovereignty(
           input.name,
-          "non-aggression",
+          input.archetype,
           input.governance,
           input.collateral
         );
         setLastReceipt(receipt);
         const preset = ARCHETYPE_PRESETS[input.archetype];
         const id = `realm-${seq}`;
+        // Deterministic valid 40-char hex address: founded realms must be
+        // usable as live treaty counterparties (the contract parses the full
+        // string with Address(); a truncated pseudo-address would revert).
+        const h = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
+        const address =
+          "0x" +
+          [2654435761, 40503, 48271, 1103515245, 3266489917]
+            .map((k, i) => h(Math.imul(seq + i + 1, k)))
+            .join("");
         const enclave: AgentEnclave = {
           id,
           name: input.name,
           archetype: input.archetype,
-          address: `0x${(seq * 48271).toString(16).padStart(8, "0")}...${id.slice(-4)}`,
+          address,
           collateral: input.collateral,
           reputation: 70,
           tier: tierForCollateral(input.collateral),
@@ -397,6 +603,7 @@ export function useWestphaliaStore() {
     reviewerMode,
     lastReceipt,
     pipeline,
+    chainOverview,
     setHoveredId,
     selectEnclave,
     focusEnclave,
@@ -405,9 +612,14 @@ export function useWestphaliaStore() {
     connectWallet,
     enterReviewerMode,
     proposeTreaty,
+    ratifyTreaty,
+    dissolveTreaty,
+    exitTreaty,
     triggerDispute,
     claimEscrow,
+    withdrawCollateral,
     foundRealm,
+    syncChainOverview,
   };
 }
 

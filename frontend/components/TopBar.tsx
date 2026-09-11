@@ -14,9 +14,11 @@ import {
   Plus,
   Radio,
   Share2,
+  Users,
   Wallet,
 } from "lucide-react";
-import type { AppView, NetworkConfig, ProtocolState } from "@/lib/types";
+import type { AppView, ChainOverview, NetworkConfig, ProtocolState } from "@/lib/types";
+import { attoToGen } from "@/lib/contract";
 import { NETWORKS } from "@/lib/networks";
 
 function Divider() {
@@ -47,6 +49,7 @@ function StabilityGauge({ value }: { value: number }) {
 
 const TABS: { id: AppView; label: string; icon: React.ReactNode }[] = [
   { id: "world", label: "Tactical 3D World", icon: <Globe2 size={13} /> },
+  { id: "agents", label: "Agent Roster", icon: <Users size={13} /> },
   { id: "topology", label: "Diplomatic Topology", icon: <Share2 size={13} /> },
   { id: "tribunal", label: "Consensus Tribunal", icon: <Gavel size={13} /> },
   { id: "treasury", label: "Treasury & Escrow", icon: <Banknote size={13} /> },
@@ -57,6 +60,7 @@ export default function TopBar({
   network,
   connected,
   reviewerMode,
+  chainOverview,
   view,
   onView,
   onSetNetwork,
@@ -70,6 +74,7 @@ export default function TopBar({
   network: NetworkConfig;
   connected: boolean;
   reviewerMode: boolean;
+  chainOverview: ChainOverview | null;
   view: AppView;
   onView: (v: AppView) => void;
   onSetNetwork: (n: NetworkConfig) => void;
@@ -80,6 +85,9 @@ export default function TopBar({
   onToggleCinematic: () => void;
 }) {
   const [netOpen, setNetOpen] = useState(false);
+  // Live on-chain escrow (atto -> whole GEN) replaces the simulated TVL
+  // whenever the wallet is connected and the overview has synced.
+  const liveTvlGen = chainOverview ? attoToGen(chainOverview.lockedEscrow) : null;
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 w-full border-b border-zinc-800/60 bg-zinc-950/90 font-mono shadow-2xl backdrop-blur-xl">
@@ -112,7 +120,9 @@ export default function TopBar({
               <Coins size={11} /> TOTAL VALUE LOCKED
             </div>
             <div className="text-[13px] font-bold tabular-nums text-cyan-300">
-              {state.totalEscrowGen.toLocaleString("en-US")} GEN
+              {liveTvlGen !== null
+                ? `${liveTvlGen.toLocaleString("en-US", { maximumFractionDigits: 1 })} GEN (chain)`
+                : `${state.totalEscrowGen.toLocaleString("en-US")} GEN`}
             </div>
           </div>
           <Divider />
@@ -122,6 +132,21 @@ export default function TopBar({
               {state.enclaves.length}
             </div>
           </div>
+          {chainOverview && (
+            <>
+              <Divider />
+              <div className="flex flex-col gap-1">
+                <div className="text-[9px] tracking-widest text-slate-400">SOLVENCY</div>
+                <div
+                  className={`text-[13px] font-bold tabular-nums ${
+                    chainOverview.solvent ? "text-emerald-300" : "text-red-300"
+                  }`}
+                >
+                  {chainOverview.solvent ? "OK" : "DEFICIT"}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right cluster: actions */}

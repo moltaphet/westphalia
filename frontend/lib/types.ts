@@ -77,6 +77,12 @@ export interface Treaty {
   parties: [string, string]; // sovereignty ids
   bondGen: number;
   createdBlock: number;
+  // On-chain treaty id (contracts index treaties from 1). Captured from the
+  // protocol counter after a live propose; undefined in simulated mode.
+  chainId?: number;
+  // True once the local actor has registered a unilateral exit notice
+  // (exit_treaty phase 1); the second call executes it post-notice.
+  exitRequested?: boolean;
   // Optional dispute metadata when under GenLayer LLM arbitration.
   dispute?: {
     validators: number;
@@ -149,6 +155,19 @@ export interface PipelineState {
   step: number; // 0-based index of the in-flight step
   steps: string[];
   done: boolean;
+  error?: string; // revert message when the underlying transaction failed
+}
+
+// On-chain protocol overview (get_protocol_overview), synced whenever a live
+// client is connected. Amounts are atto-scale strings from the contract.
+export interface ChainOverview {
+  balance: string;
+  totalCollateral: string;
+  lockedEscrow: string;
+  reserves: string;
+  totalClaimable: string;
+  nextTreatyId: string;
+  solvent: boolean;
 }
 
 export interface ProtocolState {
@@ -160,7 +179,7 @@ export interface ProtocolState {
 }
 
 // Top-level tactical workspace views.
-export type AppView = "world" | "topology" | "tribunal" | "treasury";
+export type AppView = "world" | "agents" | "topology" | "tribunal" | "treasury";
 
 export interface NetworkConfig {
   key: "studio-dev" | "studio";

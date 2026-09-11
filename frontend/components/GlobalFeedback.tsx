@@ -67,8 +67,14 @@ function TxPipelineOverlay({ pipeline: p }: { pipeline: PipelineState | null }) 
             );
           })}
         </div>
-        <div className="mt-4 text-center font-mono text-[9px] tracking-widest text-slate-500">
-          {p.done
+        <div
+          className={`mt-4 text-center font-mono text-[9px] tracking-widest ${
+            p.error ? "text-red-400" : "text-slate-500"
+          }`}
+        >
+          {p.error
+            ? `REVERTED - ${p.error}`
+            : p.done
             ? "ROUND FINALIZED - LEDGER UPDATED"
             : "DO NOT CLOSE - GENLAYER QUORUM IN PROGRESS"}
         </div>

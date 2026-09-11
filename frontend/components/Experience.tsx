@@ -5,12 +5,14 @@ import dynamic from "next/dynamic";
 import type { AppView } from "@/lib/types";
 import { useWestphaliaStore } from "@/lib/store";
 import HudOverlay from "./HudOverlay";
+import IntroOverlay from "./IntroOverlay";
 import TopBar from "./TopBar";
 import GlobalFeedback from "./GlobalFeedback";
 import FoundRealmModal from "./FoundRealmModal";
 import TopologyView from "./views/TopologyView";
 import TribunalView from "./views/TribunalView";
 import TreasuryView from "./views/TreasuryView";
+import AgentsView from "./views/AgentsView";
 
 // The WebGL board is browser-only; disable SSR so the build never renders a
 // canvas on the server.
@@ -68,6 +70,9 @@ export default function Experience() {
             onSelectTreaty={s.setSelectedTreaty}
             onFocusEnclave={s.focusEnclave}
             onPropose={s.proposeTreaty}
+            onRatify={s.ratifyTreaty}
+            onDissolve={s.dissolveTreaty}
+            onExit={s.exitTreaty}
             onDispute={s.triggerDispute}
             onClaim={s.claimEscrow}
             onOverlayChange={setHudOverlayOpen}
@@ -77,6 +82,14 @@ export default function Experience() {
             onToggleRight={() => setRightCollapsed((v) => !v)}
           />
         </>
+      )}
+
+      {view === "agents" && (
+        <AgentsView
+          state={s.state}
+          selectedId={s.selectedId}
+          onSelect={s.selectEnclave}
+        />
       )}
 
       {view === "topology" && (
@@ -91,13 +104,21 @@ export default function Experience() {
 
       {view === "tribunal" && <TribunalView state={s.state} />}
 
-      {view === "treasury" && <TreasuryView state={s.state} onClaim={s.claimEscrow} />}
+      {view === "treasury" && (
+        <TreasuryView
+          state={s.state}
+          chainOverview={s.chainOverview}
+          onClaim={s.claimEscrow}
+          onWithdrawCollateral={s.withdrawCollateral}
+        />
+      )}
 
       <TopBar
         state={s.state}
         network={s.network}
         connected={s.connected}
         reviewerMode={s.reviewerMode}
+        chainOverview={s.chainOverview}
         view={view}
         onView={setView}
         onSetNetwork={s.setNetwork}
@@ -108,6 +129,7 @@ export default function Experience() {
         onToggleCinematic={toggleCinematic}
       />
       <GlobalFeedback pipeline={s.pipeline} lastReceipt={s.lastReceipt} />
+      <IntroOverlay />
 
       {foundOpen && (
         <FoundRealmModal

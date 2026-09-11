@@ -84,8 +84,8 @@ export default function TopologyView({
   };
 
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex gap-4 px-4 pb-4 pt-[104px] font-mono">
-      <div className="flex min-h-0 flex-1 flex-col rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md">
+    <div className="custom-scrollbar pointer-events-auto absolute inset-0 z-20 flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-[104px] font-mono md:flex-row md:overflow-hidden">
+      <div className="flex min-h-[60vh] flex-1 flex-col rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md md:min-h-0">
         <div className="flex items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Share2 size={15} className="text-cyan-400" />
           <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">
@@ -209,7 +209,7 @@ export default function TopologyView({
         </div>
       </div>
 
-      <div className="hud-scroll w-[320px] shrink-0 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 p-4 shadow-hud backdrop-blur-md">
+      <div className="hud-scroll w-full shrink-0 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 p-4 shadow-hud backdrop-blur-md md:w-[320px]">
         <div className="mb-2 text-[11px] font-bold tracking-[0.2em] text-slate-200">
           NON-AGGRESSION MATRIX
         </div>
