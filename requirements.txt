@@ -1,0 +1,23 @@
+# Python toolchain for the contract test suite and the autonomous agents.
+#
+# Python 3.12 is required: the v0.3 GenVM runner's calldata format is not
+# decodable by the 0.29.x-era harness, so genlayer-test is pinned to the
+# 0.30.0rc2 pre-release.
+#
+#   uv venv --python 3.12
+#   uv pip install --prerelease=allow -r requirements.txt
+#   .venv/bin/python -m pytest tests/direct/ -q   # 33 passed
+#   .venv/bin/python -m pytest agent/ -q          # 23 passed
+
+# GenVM tooling. The pre-release pins are deliberate -- no stable release
+# provides the v0.3 API surface this contract is written against.
+genlayer-test==0.30.0rc2
+genlayer-py==0.19.0rc2
+
+# Test runner.
+pytest==9.1.1
+
+# Chain client transitively required by genlayer-py. Pinned because
+# genlayer-py 0.19.0rc2 predates several breaking web3 8.x point releases.
+web3==8.0.0
+eth-account==0.14.0

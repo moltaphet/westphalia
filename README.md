@@ -256,9 +256,15 @@ contract requires.
 
 ```bash
 uv venv --python 3.12
-uv pip install --prerelease=allow "genlayer-test==0.30.0rc2"
+uv pip install --prerelease=allow -r requirements.txt
 .venv/bin/python -m pytest -q          # 56 passed
 ```
+
+`requirements.txt` pins the whole Python toolchain. Python 3.12 is required:
+the v0.3 GenVM calldata format is not decodable by the 0.29.x-era harness, so
+`genlayer-test` is pinned to the `0.30.0rc2` pre-release and the install needs
+`--prerelease=allow`. Plain `pip` has no such flag - use `uv`, or pass
+`--pre` to `pip install`.
 
 The suite runs the contract in-memory (no chain, no keys). It covers the
 baseline adversarial cases, the V2 protocol, thirteen red-team exploit
@@ -293,7 +299,8 @@ component sums equalling `balance`.
 
 ## Local Setup and Run
 
-Requirements: Node.js 18+ (tested on Node 22) and npm.
+Requirements: Node.js 18+ (tested on Node 22) and npm for the frontend; Python
+3.12 and `uv` for the contract suite and the agents (`requirements.txt`).
 
 ```bash
 cd frontend
@@ -374,9 +381,9 @@ collateral-exit gate locked on open treaty bonds.
   litigation rejection, and sanctioned-plaintiff standing loss, plus 5
   post-audit P1-P4 PoC regressions (`test_poc_regressions.py`). The suite
   requires Python 3.12 and `genlayer-test==0.30.0rc2` (the v0.2-era
-  0.29.x harness cannot decode the v0.3 calldata format), e.g.
-  `uv venv --python 3.12 && uv pip install --prerelease=allow
-  "genlayer-test==0.30.0rc2"`.
+  0.29.x harness cannot decode the v0.3 calldata format); both are pinned in
+  `requirements.txt`, installed with
+  `uv venv --python 3.12 && uv pip install --prerelease=allow -r requirements.txt`.
 - Agent tests: `pytest agent/` -> **23 passed**, covering the negotiation
   scorer (`test_decider.py`), the deterministic telemetry arithmetic asserted
   against the contract's own constants (`test_telemetry.py`), and verdict
