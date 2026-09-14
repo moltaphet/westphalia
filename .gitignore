@@ -17,3 +17,7 @@ agent/keys/
 
 # GenVM test harness output, regenerated on every run
 artifacts/
+
+# macOS Finder metadata (the frontend has its own copy of this rule; the repo
+# root needs one too or a stray .DS_Store lands in a commit)
+.DS_Store

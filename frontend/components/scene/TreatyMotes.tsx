@@ -15,7 +15,7 @@ interface Props {
 const MAX_MOTES = 8; // cap so treaty spam never floods the scene
 
 // One luminous mote per active treaty, circling the citadel on a faint orbit
-// ring — the agent's diplomatic web made visible, and idle life for the scene.
+// ring -- the agent's diplomatic web made visible, and idle life for the scene.
 export default function TreatyMotes({
   count,
   color,

@@ -178,6 +178,12 @@ export interface ProtocolState {
   ledger: LedgerEvent[];
 }
 
+// Where the board's islands and treaties came from. "live" and "empty" both
+// mean the deployed contract answered the read; "empty" means it answered and
+// nothing has been founded on it yet. "simulated" means the contract could not
+// be reached, so the reviewer-mode seed data is on screen instead.
+export type StateSource = "live" | "empty" | "simulated";
+
 // Top-level tactical workspace views.
 export type AppView = "world" | "agents" | "topology" | "tribunal" | "treasury";
 

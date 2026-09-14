@@ -4,9 +4,55 @@ A full-stack Next.js dApp that renders the **Westphalia Protocol** as an
 interactive isometric 3D voxel world board. Autonomous agent sovereignties,
 on-chain diplomatic treaties, and GenLayer multi-LLM dispute arbitrations are
 visualized as a living tactical map, with a monospace command HUD for driving
-Web3 workflows against GenLayer StudioNet.
+Web3 workflows against GenLayer Studio Net.
+
+| | |
+|---|---|
+| **Live contract** | [`0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`](https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3) |
+| **Network** | GenLayer Studio Net, chain 61997 |
+| **Demo video** | _TODO: link before final submission_ |
+| **Reviewer quickstart** | [Quickstart for reviewers](#quickstart-for-reviewers) |
 
 ---
+
+## Why this needs GenLayer
+
+Most of this protocol could run anywhere. Founding a sovereignty, escrowing a
+bond, releasing it on expiry - that is bookkeeping any chain can do, and a
+contract that stopped there would not need an intelligent chain at all.
+
+The part that cannot run anywhere else is the **breach**. A treaty here is a
+natural-language instrument: *"Halcyon will hold data-sharing uptime at or above
+9950 basis points and latency at or below 300 basis points."* Deciding whether
+Halcyon broke that requires reading a live telemetry feed and judging prose
+against numbers - an operation with no deterministic answer and no trusted
+third party to delegate to. On a conventional chain you must either (a) reduce
+the clause to something a machine can check, which forces counterparties to
+state only assertions a script can evaluate and rules out every clause worth
+writing; or (b) appoint an oracle, which reintroduces exactly the central
+authority a treaty between sovereign agents exists to avoid.
+
+GenLayer removes the tradeoff. `trigger_dispute` fetches the treaty-bound
+oracles **inside consensus**, and a validator quorum independently arbitrates
+the allegation against the readings, reaching agreement on a verdict **tier**
+before any escrow moves. That structure is what makes the guarantee real:
+
+- **No trusted adjudicator.** The verdict is the quorum's, not a server's.
+- **No forged evidence.** A treaty's oracle URLs are agreed at proposal time,
+  inspectable by the counterparty before ratification, and read from storage at
+  dispute time - so a plaintiff cannot point adjudication at an oracle of their
+  own. This closes the forged-oracle vector, and
+  `test_forged_oracle_impossible` pins it.
+- **No settlement on bad data.** A transient fetch or malformed LLM response
+  reverts the whole dispute and refunds the bond rather than settling on
+  evidence nobody verified.
+- **No ambiguity in the outcome.** The verdict is quantized to one of four
+  discrete tiers before it touches storage, so settlement is deterministic even
+  though adjudication is not.
+
+If the question is "why can't this be a database with an admin panel" - because
+the entire point is a pact between parties who do not trust each other, where
+neither party, and no third party, gets to decide who breached.
 
 ## Architecture Overview
 
@@ -44,12 +90,14 @@ frontend/
       TopologyView.tsx    2D treaty node graph + non-aggression matrix
       TribunalView.tsx    GenLayer consensus courtroom dashboard
       TreasuryView.tsx    Escrow collateral + pull-pattern withdrawals
-  lib/
+    lib/
     types.ts              Domain model (AgentEnclave, Treaty, Audit, View, ...)
     store.ts              Dynamic state hub: enclaves, actions, found-realm
     networks.ts           GenLayer StudioNet RPC + chain configuration
-    contract.ts           Mock intelligent-contract ABI + Web3 binding
-    mockData.ts           Seed treaties, ledger, and consensus audits
+    chainState.ts         Reads the contract and maps it onto the domain model
+    archetypes.ts         Archetype presets + deterministic terrain seeds
+    contract.ts           Intelligent-contract ABI + Web3 binding
+    mockData.ts           Reviewer-mode seed treaties, ledger, and audits
     world.ts              Orbital layout algorithm + procedural island tiles
     noise.ts              Deterministic value/fBm noise for terrain relief
     board.ts              Shared render constants + status/kind color maps
@@ -157,9 +205,89 @@ and structures are generated procedurally with Three.js primitives and
 - **Action modals** - Propose Treaty (payable GEN bond), Trigger Dispute
   (submit breach evidence to GenLayer validators), and Claim/Withdraw
   (pull-pattern escrow withdrawal).
-- **1-click ephemeral reviewer mode** - a read-only simulation populated with
-  realistic on-chain treaty data when no wallet is connected. Every action
-  still resolves to a simulated receipt so the UI stays fully interactive.
+- **Live board, no wallet required** - the archipelago hydrates from the
+  deployed contract on load: treaties are enumerated through the protocol
+  counter, and each treaty's parties resolve to their enclave records. GenLayer
+  answers views over `gen_call`, which needs no signer, so a first-time visitor
+  sees the real protocol rather than placeholder data. The command bar badges
+  the source as `ON-CHAIN`, `ON-CHAIN / EMPTY`, or `SIMULATED`.
+- **1-click ephemeral reviewer mode** - if the contract cannot be reached, the
+  board falls back to a seeded simulation and says so, instead of rendering
+  empty. Every action still resolves to a simulated receipt so the UI stays
+  fully interactive.
+
+---
+
+## Quickstart for reviewers
+
+Three independent ways to verify this submission, cheapest first.
+
+### 1. See the live protocol in the browser (about one minute)
+
+```bash
+git clone https://github.com/moltaphet/westphalia
+cd westphalia/frontend
+npm install
+npm run dev          # http://localhost:3000
+```
+
+Click **ENTER THE ARCHIPELAGO**. **No wallet is needed and nothing is mocked**:
+the board reads the deployed contract directly. GenLayer answers view calls over
+`gen_call`, which needs no signer, so a first-time visitor sees real protocol
+state. Confirm it yourself:
+
+- The command bar reads **ON-CHAIN** next to the protocol name. If the contract
+  were unreachable it would read **SIMULATED** instead, and the islands would be
+  seed data.
+- The two islands are **Halcyon** and **Meridian** - the sovereignties the
+  autonomous agents actually founded on chain, not the seed archipelago.
+- **TOTAL VALUE LOCKED** and the solvency badge are read live from
+  `get_protocol_overview`, and they reconcile against the explorer
+  (see step 3).
+
+Reads need no wallet. **Writes do**: clicking a propose/ratify/dispute action
+without a wallet connected produces a receipt labelled *simulated*, and the
+command bar stays on **REVIEWER**. To dispatch a real transaction, connect an
+injected wallet holding GEN on chain 61997 - `connect()` requests the address
+from the wallet, keeps the key there, and estimates the fee the consensus
+contract requires.
+
+### 2. Run the contract test suite (about three minutes)
+
+```bash
+uv venv --python 3.12
+uv pip install --prerelease=allow "genlayer-test==0.30.0rc2"
+.venv/bin/python -m pytest -q          # 56 passed
+```
+
+The suite runs the contract in-memory (no chain, no keys). It covers the
+baseline adversarial cases, the V2 protocol, thirteen red-team exploit
+regressions, and the P1-P4 post-audit PoCs - each of which was confirmed as a
+working exploit against an earlier revision before it was fixed.
+
+### 3. Run the autonomous agents against the live chain (about ten minutes)
+
+```bash
+.venv/bin/python -m agent.demo --fresh
+```
+
+Two agents fund themselves from the faucet, found enclaves, negotiate a treaty
+across a rejected first proposal, ratify it, and then litigate it - ending in a
+GenLayer multi-LLM verdict. This is the only step that needs a funded key; it
+mints its own into `agent/keys/` (gitignored). `--no-adjudicate` stops before
+the dispute.
+
+### Verify the deployment on the explorer
+
+Contract:
+[`0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`](https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3)
+on GenLayer Studio Net (chain 61997).
+
+GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live
+contract and cannot be used to compare deployed bytecode against source. The
+deployment is evidenced instead by live view reads: `get_protocol_overview`
+answers from that address and reports `solvent: true`, with the tracked
+component sums equalling `balance`.
 
 ---
 
@@ -180,6 +308,10 @@ cd frontend
 npm run build
 npm run start
 ```
+
+Configuration is optional. `frontend/.env.example` documents the two public
+variables; with no `.env.local` at all the app falls back to the deployed
+address and RPC baked into `lib/networks.ts`.
 
 ---
 
@@ -291,25 +423,54 @@ The dApp targets **GenLayer StudioNet**:
 
 | Network            | Chain ID | RPC                                    |
 | ------------------ | -------- | -------------------------------------- |
-| StudioNet (dev)    | 61997    | https://studio-dev.genlayer.com/api    |
+| Studio Net (dev)   | 61997    | https://studio-next.genlayer.com/api   |
 | Studio (fallback)  | 61999    | https://studio.genlayer.com/api        |
 
 Explorer: https://explorer-studio-dev.genlayer.com
 
+`studio-next.genlayer.com` and `studio-dev.genlayer.com` both serve chain 61997
+and answer identically. `NEXT_PUBLIC_GENLAYER_RPC_URL` selects between them; the
+default is studio-next.
+
 - Web3 access is provided through `genlayer-js`, imported **lazily on the
   client** inside `lib/contract.ts` so server-side rendering and the build step
   never touch browser-only wallet code.
+- The chain object is taken from the SDK's own `chains.studioDevnet` (spread, so
+  only the RPC endpoint is overridden), not hand-built. A hand-built
+  `{ id, rpcUrl }` object is not enough for a write: genlayer-js reads
+  `consensusMainContract` (the address and ABI the transaction is sent to),
+  `defaultNumberOfInitialValidators`, `defaultConsensusMaxRotations` and
+  `isStudio` off the chain. Without them a write dies inside viem
+  ("Cannot read properties of undefined (reading 'default')") or at
+  "Cannot convert undefined to a BigInt".
+- Reads and writes use separate clients. Views go through an **account-less**
+  client, so the board hydrates without a wallet; writes go through the
+  connected client, which exists only when a wallet is present.
+- A write needs two things the SDK will not supply on its own. **(1)** An
+  account: a client built without one throws "No account set" before any
+  calldata is built, so `connect()` requests an address from the injected wallet
+  and passes `{ account, provider }`, keeping the key inside the extension.
+  **(2)** A fee: Studio Net has no fee-manager contract, so the fee is derived
+  from the chain's live fee policy -- but only when the SDK is asked, via
+  `estimateTransactionFees()`. Omitting it leaves `feeValue` at 0 and the
+  consensus contract rejects the transaction with `FeeValueMustBeNonZero(1)`.
+  `DiplomaticContract.write()` estimates the fee and passes it on every write.
+- Enclaves have no on-chain enumerator -- `get_enclave` needs an address. The
+  board therefore reaches them transitively: treaties are enumerated through
+  `next_treaty_id`, and each treaty's `party_a` / `party_b` resolves to an
+  enclave record. A sovereignty that has never been party to a treaty answers
+  `get_enclave` but cannot be discovered by the board.
 - `DiplomaticContract` exposes the full on-chain surface of the real contract:
-  `foundSovereignty`, `proposeTreaty` (with treaty-bound oracle URLs and typed
-  params), `ratifyTreaty`, `triggerDispute` (allegation + evidence only; the
-  oracles come from treaty storage), `claimPayout`, `recoverBond`, and
-  `withdrawCollateral`, bound to the matching ABI in `DIPLOMATIC_ABI`.
-  Amounts are converted to atto-scale uint256 via `toAtto`.
+  all 19 public methods, `foundSovereignty`, `proposeTreaty` (with treaty-bound
+  oracle URLs and typed params), `ratifyTreaty`, `triggerDispute` (allegation +
+  evidence only; the oracles come from treaty storage), `claimPayout`,
+  `recoverBond`, and `withdrawCollateral`, bound to the matching ABI in
+  `DIPLOMATIC_ABI`. Amounts are converted to atto-scale uint256 via `toAtto`.
 - When no injected wallet / SDK client is available, calls resolve to a
-  deterministic **simulated** receipt (reviewer mode). When a live client is
-  present, the same methods route through `writeContract`.
+  deterministic **simulated** receipt (reviewer mode), and the command bar says
+  so. With a wallet connected they route through `writeContract` for real.
 - To wire a real deployment: deploy the Westphalia intelligent contract to
-  StudioNet, update `DIPLOMATIC_CONTRACT_ADDRESS`, and connect a wallet via the
+  Studio Net, update `DIPLOMATIC_CONTRACT_ADDRESS`, and connect a wallet via the
   command bar. The ABI in `lib/contract.ts` mirrors the deployed contract's
   view/payable/nonpayable methods exactly.
 
@@ -320,6 +481,12 @@ Explorer: https://explorer-studio-dev.genlayer.com
 - `npm run build` completes with **0 TypeScript, lint, or SSR/Canvas errors**.
 - The WebGL board is code-split behind a `dynamic(..., { ssr: false })` import,
   keeping the initial payload light and avoiding server canvas rendering.
+- The board hydrates from
+  `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3` with no wallet connected. The
+  mapping is checked against a capture from that contract: the collateral it
+  derives sums to the contract's own `total_collateral` (300 GEN) and the locked
+  escrow sums to `locked_escrow` (700 GEN), with the settled treaty's released
+  bonds correctly excluded.
 - All UI labels, code, variables, and comments are pure ASCII English.
 - Live end-to-end run on Studio Devnet against
   `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`, with fresh identities and every

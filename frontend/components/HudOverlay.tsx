@@ -560,9 +560,43 @@ function ConsensusAuditModal({
   onClose,
 }: {
   event: LedgerEvent;
-  audit: ConsensusAudit;
+  audit: ConsensusAudit | null;
   onClose: () => void;
 }) {
+  // No recorded audit means no recorded audit. The inspector used to fill this
+  // gap with a synthesized round -- invented validators, votes and a
+  // telemetry endpoint -- printed under real on-chain events.
+  if (!audit) {
+    return (
+      <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-md">
+        <div className="w-full max-w-lg rounded-lg border border-slate-700/60 bg-slate-900 shadow-hud">
+          <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Cpu size={16} className="text-slate-500" />
+              <span className="text-[12px] font-bold tracking-[0.2em] text-slate-100">
+                CONSENSUS AUDIT
+              </span>
+              <span className="font-mono text-[9px] text-slate-500">#{event.block}</span>
+            </div>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-200">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="p-4">
+            <p className="rounded border border-slate-700/60 bg-slate-800/40 p-3 text-[11px] leading-relaxed text-slate-400">
+              No consensus round is attached to this event. {event.message}
+            </p>
+            <p className="mt-3 text-[10px] leading-relaxed text-slate-500">
+              This event was reconstructed from live contract state, not from a
+              stored adjudication. Only disputed treaties run an equivalence
+              round, and its inputs are the oracle endpoints recorded on the
+              treaty itself.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   const breachCount = audit.validators.filter((v) => v.vote === "BREACH").length;
   return (
     <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-md">
@@ -607,6 +641,14 @@ function ConsensusAuditModal({
               <Cpu size={12} className="text-violet-400" /> MULTI-LLM VALIDATOR VOTES
             </div>
             <div className="flex flex-col gap-2">
+              {audit.validators.length === 0 && (
+                <p className="rounded border border-slate-700/60 bg-slate-800/40 p-2.5 text-[10px] leading-relaxed text-slate-400">
+                  No per-validator ballots are recorded on-chain for this event.
+                  GenLayer runs its equivalence round inside the transaction,
+                  and the contract stores the resulting status rather than the
+                  individual votes.
+                </p>
+              )}
               {audit.validators.map((v) => (
                 <div key={v.id} className="rounded border border-slate-700/60 bg-slate-800/40 p-2.5">
                   <div className="flex items-center justify-between">

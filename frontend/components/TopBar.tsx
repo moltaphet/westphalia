@@ -17,7 +17,13 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import type { AppView, ChainOverview, NetworkConfig, ProtocolState } from "@/lib/types";
+import type {
+  AppView,
+  ChainOverview,
+  NetworkConfig,
+  ProtocolState,
+  StateSource,
+} from "@/lib/types";
 import { attoToGen } from "@/lib/contract";
 import { NETWORKS } from "@/lib/networks";
 
@@ -60,6 +66,7 @@ export default function TopBar({
   network,
   connected,
   reviewerMode,
+  stateSource,
   chainOverview,
   view,
   onView,
@@ -74,6 +81,7 @@ export default function TopBar({
   network: NetworkConfig;
   connected: boolean;
   reviewerMode: boolean;
+  stateSource: StateSource;
   chainOverview: ChainOverview | null;
   view: AppView;
   onView: (v: AppView) => void;
@@ -105,8 +113,33 @@ export default function TopBar({
               </span>
               <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981] animate-pulseGlow" />
             </div>
-            <div className="text-[9px] tracking-[0.3em] text-slate-500">
-              GENLAYER v0.3.0 CORE
+            <div className="flex items-center gap-2 text-[9px] tracking-[0.3em] text-slate-500">
+              <span>GENLAYER v0.3.0 CORE</span>
+              {/* Where the islands and treaties on screen came from. Without
+                  this a viewer cannot tell the live archipelago apart from the
+                  reviewer-mode seed, and the TVL figure alone does not say. */}
+              <span
+                title={
+                  stateSource === "simulated"
+                    ? "The deployed contract could not be reached, so this board is seed data."
+                    : stateSource === "empty"
+                      ? "The deployed contract answered and has no sovereignties founded yet."
+                      : "Islands and treaties read from the deployed contract."
+                }
+                className={`rounded border px-1.5 py-0.5 text-[8px] font-bold tracking-[0.2em] ${
+                  stateSource === "live"
+                    ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-300"
+                    : stateSource === "empty"
+                      ? "border-zinc-600 bg-zinc-800/60 text-slate-400"
+                      : "border-amber-400/50 bg-amber-500/15 text-amber-300"
+                }`}
+              >
+                {stateSource === "live"
+                  ? "ON-CHAIN"
+                  : stateSource === "empty"
+                    ? "ON-CHAIN / EMPTY"
+                    : "SIMULATED"}
+              </span>
             </div>
           </div>
         </div>

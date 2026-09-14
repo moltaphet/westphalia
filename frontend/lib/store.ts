@@ -11,39 +11,21 @@ import type {
   PipelineState,
   ProtocolState,
   ReputationTier,
+  StateSource,
   Treaty,
   TreatyKind,
 } from "./types";
 import { TREATIES, LEDGER } from "./mockData";
 import { DEFAULT_NETWORK } from "./networks";
 import { DiplomaticContract, type TxReceipt } from "./contract";
+import { fetchChainSnapshot } from "./chainState";
+import { ARCHETYPE_PRESETS } from "./archetypes";
 
 // Biome + telemetry presets used when founding a new realm of each archetype.
-export const ARCHETYPE_PRESETS: Record<
-  Archetype,
-  { biome: Omit<BiomeTheme, "elevationSeed">; yieldApr: number; blurb: string }
-> = {
-  "Autonomous Arbiter": {
-    biome: { base: "#047857", ridge: "#065f46", accent: "#34d399" },
-    yieldApr: 3.6,
-    blurb: "Impartial dispute adjudication and treaty parsing.",
-  },
-  "Liquidity Nexus": {
-    biome: { base: "#6d28d9", ridge: "#4c1d95", accent: "#a78bfa" },
-    yieldApr: 5.4,
-    blurb: "Cross-border settlement and market-making corridors.",
-  },
-  "Oracle Collective": {
-    biome: { base: "#0e7490", ridge: "#334155", accent: "#22d3ee" },
-    yieldApr: 4.1,
-    blurb: "High-uptime data ingestion and attestation.",
-  },
-  "Defense Vanguard": {
-    biome: { base: "#7c2d12", ridge: "#3f1d1d", accent: "#fb7185" },
-    yieldApr: 2.8,
-    blurb: "Perimeter defense and containment enforcement.",
-  },
-};
+// Defined in ./archetypes so the on-chain state mapper can share one palette
+// source; re-exported here because the found-realm modal imports it from the
+// store.
+export { ARCHETYPE_PRESETS };
 
 // Seed enclaves occupy Ring 1 (indices 0-3) around the Geneva core.
 // Addresses are valid 40-char hex (they are passed to the on-chain contract
@@ -179,7 +161,15 @@ export function useWestphaliaStore() {
 
   const [network, setNetwork] = useState<NetworkConfig>(DEFAULT_NETWORK);
   const [connected, setConnected] = useState(false);
+  // True while no wallet write path exists, so every action resolves to a
+  // simulated receipt. This is about *writes*, not about where the displayed
+  // data came from -- see stateSource for that.
   const [reviewerMode, setReviewerMode] = useState(true);
+
+  // Where the board's islands and treaties came from. "live" and "empty" both
+  // mean the contract answered; "simulated" means it could not be reached and
+  // the reviewer-mode seed data is on screen instead.
+  const [stateSource, setStateSource] = useState<StateSource>("simulated");
   const [lastReceipt, setLastReceipt] = useState<TxReceipt | null>(null);
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
   const [chainOverview, setChainOverview] = useState<ChainOverview | null>(null);
@@ -200,23 +190,46 @@ export function useWestphaliaStore() {
     setLedger((prev) => [{ ...ev, id: `l${seq++}` }, ...prev].slice(0, 48));
   }, []);
 
-  // Pull the on-chain overview (balances, solvency, next treaty id) whenever a
-  // live client is connected. Degrades to a no-op in reviewer mode.
-  const syncChainOverview = useCallback(async () => {
-    const ov = await contractRef.current.read<Record<string, unknown>>(
-      "get_protocol_overview"
+  // Sync the board against the chain: the protocol overview plus the islands
+  // and treaties themselves. Runs on mount, on network change, and after every
+  // write so a new treaty appears without a reload.
+  //
+  // Reads need no wallet (GenLayer answers views over gen_call), so this is not
+  // gated on a connection. Three outcomes, each rendered honestly:
+  //   - contract answered with enclaves -> the live archipelago
+  //   - contract answered, nothing founded -> an empty board, not a mock one
+  //   - contract unreachable -> the simulated seed, labelled as such
+  const syncChain = useCallback(async () => {
+    const snap = await fetchChainSnapshot(contractRef.current);
+    if (!snap) {
+      setStateSource("simulated");
+      return;
+    }
+    setChainOverview(snap.overview);
+    setEnclaves(snap.enclaves);
+    setTreaties(snap.treaties);
+    // The feed is replaced with it. Leaving the simulated seed in place would
+    // print fabricated history under real islands -- events naming enclaves the
+    // contract has never heard of.
+    setLedger(snap.ledger);
+    // Keep the selection pointing at an enclave that actually exists. The
+    // initial selection is a seed id, so without this it dangles as soon as the
+    // live board replaces the simulated one.
+    setSelectedId((prev) =>
+      prev && snap.enclaves.some((e) => e.id === prev)
+        ? prev
+        : (snap.enclaves[0]?.id ?? null)
     );
-    if (!ov) return;
-    setChainOverview({
-      balance: String(ov.balance ?? "0"),
-      totalCollateral: String(ov.total_collateral ?? "0"),
-      lockedEscrow: String(ov.locked_escrow ?? "0"),
-      reserves: String(ov.reserves ?? "0"),
-      totalClaimable: String(ov.total_claimable ?? "0"),
-      nextTreatyId: String(ov.next_treaty_id ?? "1"),
-      solvent: Boolean(ov.solvent),
-    });
+    setStateSource(snap.enclaves.length > 0 ? "live" : "empty");
   }, []);
+
+  // Hydrate the board from the deployed contract on mount, and re-read whenever
+  // the selected network changes. No wallet is required: GenLayer answers views
+  // over gen_call, so a first-time visitor sees real protocol state rather than
+  // seed data.
+  useEffect(() => {
+    void syncChain();
+  }, [network, syncChain]);
 
   // Rebind the contract client whenever the network changes, so a live
   // connection follows the selected RPC instead of staying pinned to the
@@ -229,9 +242,8 @@ export function useWestphaliaStore() {
     void contract.connect().then((ok) => {
       setConnected(ok);
       setReviewerMode(!ok);
-      if (ok) void syncChainOverview();
     });
-  }, [network, syncChainOverview]);
+  }, [network, syncChain]);
 
   // Transaction pipeline: the on-chain call runs FIRST (step 0, while the UI
   // shows "Signature Verified"); a revert aborts the animation and surfaces
@@ -260,11 +272,11 @@ export function useWestphaliaStore() {
         await sleep(i === 2 ? 1000 : 650);
       }
       setPipeline((p) => (p ? { ...p, step: PIPELINE_STEPS.length - 1, done: true } : p));
-      void syncChainOverview();
+      void syncChain();
       await sleep(1000);
       setPipeline(null);
     },
-    [syncChainOverview]
+    [syncChain]
   );
 
   // Selection / camera focus.
@@ -284,7 +296,7 @@ export function useWestphaliaStore() {
     const ok = await contract.connect();
     setConnected(ok);
     setReviewerMode(!ok);
-    if (ok) void syncChainOverview();
+    if (ok) void syncChain();
     pushLedger({
       block: 1843000 + seq,
       kind: "consensus-verdict",
@@ -293,7 +305,7 @@ export function useWestphaliaStore() {
         ? `Wallet linked to ${network.label}.`
         : `No wallet detected. Reviewer simulation active on ${network.label}.`,
     });
-  }, [network, pushLedger, syncChainOverview]);
+  }, [network, pushLedger, syncChain]);
 
   const enterReviewerMode = useCallback(() => {
     setReviewerMode(true);
@@ -309,7 +321,11 @@ export function useWestphaliaStore() {
   const proposeTreaty = useCallback(
     async (partnerId: string, kind: TreatyKind, terms: string, bondGen: number) => {
       await runPipeline(`Propose ${kind} treaty`, async () => {
-        const self = selectedId ?? "alpha";
+        // The proposer is the selected enclave, or the first one when nothing
+        // is selected. Never a hardcoded seed id: once the board has hydrated
+        // from chain that id belongs to no island, and the treaty would name a
+        // party the protocol cannot resolve.
+        const self = selectedId ?? enclaves[0]?.id ?? "";
         const partner = enclaves.find((e) => e.id === partnerId);
         // Oracle feeds are treaty-bound on-chain (V3): the proposer picks the
         // telemetry sources, the counterparty inspects them before ratifying.
@@ -601,6 +617,7 @@ export function useWestphaliaStore() {
     network,
     connected,
     reviewerMode,
+    stateSource,
     lastReceipt,
     pipeline,
     chainOverview,
@@ -619,7 +636,7 @@ export function useWestphaliaStore() {
     claimEscrow,
     withdrawCollateral,
     foundRealm,
-    syncChainOverview,
+    syncChain,
   };
 }
 

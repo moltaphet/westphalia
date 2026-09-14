@@ -244,7 +244,7 @@ function OracleForm({ baseY, tint, tintMid, statusColor, active }: FormProps) {
 }
 
 // VANGUARD: a broad angular fortress-ziggurat with perimeter shield panels
-// and corner spikes — low, wide and intimidating.
+// and corner spikes -- low, wide and intimidating.
 function VanguardForm({ baseY, tint, tintMid, statusColor, active }: FormProps) {
   const shields = useRef<THREE.Group>(null);
 

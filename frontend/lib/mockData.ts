@@ -264,79 +264,16 @@ export function shortAddress(addr: string): string {
   return addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
 }
 
-// Ensure every ledger event can open the Consensus Audit inspector by
-// synthesizing a deterministic GenLayer round when none is attached.
-export function auditForEvent(ev: LedgerEvent): ConsensusAudit {
-  if (ev.audit) return ev.audit;
-
-  const compliantRounds: Record<string, string> = {
-    "treaty-proposed": "proposed clause set is internally consistent and funded",
-    "treaty-signed": "counter-signature and bond lock verified on-chain",
-    "escrow-released": "milestone predicate satisfied; release is authorized",
-    "consensus-verdict": "prior verdict re-attested; no new evidence ingested",
-  };
-  const summary =
-    compliantRounds[ev.kind] ?? "state transition validated under quorum";
-
-  return {
-    clause: `Automated attestation for event ${ev.id.toUpperCase()}: ${ev.message}`,
-    telemetry: `on-chain state proof + escrow ledger snapshot at block ${ev.block}; ${summary}.`,
-    telemetrySource: "gl.nondet.web GET studio-dev.genlayer.com/state/attestation",
-    validators: [
-      {
-        id: "Validator A",
-        model: "gpt-class-a",
-        vote: "COMPLIANT",
-        rationale: "Deterministic predicate holds against the ingested snapshot.",
-      },
-      {
-        id: "Validator B",
-        model: "claude-class-b",
-        vote: "COMPLIANT",
-        rationale: "Independent recomputation reproduces the same state root.",
-      },
-      {
-        id: "Validator C",
-        model: "mixtral-class-c",
-        vote: "COMPLIANT",
-        rationale: "No contradicting external telemetry found in the review window.",
-      },
-    ],
-    finalVote: "COMPLIANT",
-    rationale:
-      "Equivalence principle: unanimous COMPLIANT (3 of 3). All validators agree within the leader's tolerance, so the round finalizes without penalty.",
-    penalty: "No penalty. Event finalized and appended to the diplomatic ledger.",
-    transcript: [
-      {
-        speaker: "Leader",
-        model: "genvm-leader",
-        line: `Round opened for event ${ev.id.toUpperCase()} at block ${ev.block}.`,
-      },
-      {
-        speaker: "Validator A",
-        model: "gpt-class-a",
-        line: "Deterministic predicate holds against the ingested snapshot. COMPLIANT.",
-      },
-      {
-        speaker: "Validator B",
-        model: "claude-class-b",
-        line: "Independent recomputation reproduces the same state root. COMPLIANT.",
-      },
-      {
-        speaker: "Validator C",
-        model: "mixtral-class-c",
-        line: "No contradicting external telemetry in the review window. COMPLIANT.",
-      },
-      {
-        speaker: "Leader",
-        model: "genvm-leader",
-        line: "Unanimous COMPLIANT. Finalizing without penalty.",
-      },
-    ],
-    settlement: [
-      { label: "Snapshot ingested", block: ev.block, done: true },
-      { label: "Quorum deliberation", block: ev.block + 2, done: true },
-      { label: "Round finalized", block: ev.block + 4, done: true },
-    ],
-  };
+// The consensus audit attached to a ledger event, or null when there is none.
+//
+// This used to synthesize a full GenLayer round -- named validators, model
+// labels, votes, a transcript, and a telemetry endpoint -- for any event that
+// lacked one. Chain-derived events never carry an `audit`, so on a connected
+// board every click on the live treaty feed opened a fabricated validator
+// panel printed underneath real on-chain state. Nothing on-chain backs those
+// votes, so the inspector now reports their absence instead of inventing them.
+// Real audits come from chainState.ts, built only from fields the contract
+// actually returns.
+export function auditForEvent(ev: LedgerEvent): ConsensusAudit | null {
+  return ev.audit ?? null;
 }

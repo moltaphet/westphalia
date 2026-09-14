@@ -118,6 +118,7 @@ export default function Experience() {
         network={s.network}
         connected={s.connected}
         reviewerMode={s.reviewerMode}
+        stateSource={s.stateSource}
         chainOverview={s.chainOverview}
         view={view}
         onView={setView}

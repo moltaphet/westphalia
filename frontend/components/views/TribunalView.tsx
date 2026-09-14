@@ -119,21 +119,23 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
                 </div>
               </section>
 
-              <section>
-                <div className="mb-1 flex items-center gap-1.5 text-[10px] tracking-widest text-slate-400">
-                  <MessageSquare size={12} className="text-violet-400" /> GENVM DELIBERATION LOG
-                </div>
-                <div className="flex flex-col gap-2 rounded border border-slate-700/60 bg-slate-950/50 p-3">
-                  {(audit.transcript ?? []).map((line, i) => (
-                    <div key={i} className="text-[10px] leading-snug">
-                      <span className="text-cyan-300">{line.speaker}</span>
-                      <span className="text-slate-600"> [{line.model}]</span>
-                      <span className="text-slate-600">: </span>
-                      <span className="text-slate-300">{line.line}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              {(audit.transcript ?? []).length > 0 && (
+                <section>
+                  <div className="mb-1 flex items-center gap-1.5 text-[10px] tracking-widest text-slate-400">
+                    <MessageSquare size={12} className="text-violet-400" /> GENVM DELIBERATION LOG
+                  </div>
+                  <div className="flex flex-col gap-2 rounded border border-slate-700/60 bg-slate-950/50 p-3">
+                    {(audit.transcript ?? []).map((line, i) => (
+                      <div key={i} className="text-[10px] leading-snug">
+                        <span className="text-cyan-300">{line.speaker}</span>
+                        <span className="text-slate-600"> [{line.model}]</span>
+                        <span className="text-slate-600">: </span>
+                        <span className="text-slate-300">{line.line}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
 
             {/* Right column: votes + settlement + penalty */}
@@ -143,6 +145,13 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
                   <Cpu size={12} className="text-violet-400" /> VALIDATOR PANEL
                 </div>
                 <div className="flex flex-col gap-2">
+                  {audit.validators.length === 0 && (
+                    <p className="rounded border border-slate-700/60 bg-slate-800/40 p-2.5 text-[10px] leading-relaxed text-slate-400">
+                      The contract stores the treaty status a round produced, not
+                      the individual ballots. Per-validator votes are not
+                      recoverable from chain state.
+                    </p>
+                  )}
                   {audit.validators.map((v) => (
                     <div key={v.id} className="rounded border border-slate-700/60 bg-slate-800/40 p-2.5">
                       <div className="flex items-center justify-between">
@@ -164,14 +173,17 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
                 </div>
               </section>
 
-              {/* Real-time equivalence consensus meter */}
-              {(() => {
-                const total = audit.validators.length || 1;
-                const breach = audit.validators.filter((v) => v.vote === "BREACH").length;
-                const compliant = audit.validators.filter((v) => v.vote === "COMPLIANT").length;
-                const majority = Math.round((Math.max(breach, compliant) / total) * 100);
-                const verdictColor = VOTE_COLOR[audit.finalVote];
-                return (
+              {/* Real-time equivalence consensus meter. Hidden when the
+                  contract recorded no ballots -- a 0% bar reads as "nobody
+                  agreed" when the truth is "nobody was recorded". */}
+              {audit.validators.length > 0 &&
+                (() => {
+                  const total = audit.validators.length;
+                  const breach = audit.validators.filter((v) => v.vote === "BREACH").length;
+                  const compliant = audit.validators.filter((v) => v.vote === "COMPLIANT").length;
+                  const majority = Math.round((Math.max(breach, compliant) / total) * 100);
+                  const verdictColor = VOTE_COLOR[audit.finalVote];
+                  return (
                   <section>
                     <div className="mb-2 flex items-center justify-between text-[10px] tracking-widest text-slate-400">
                       <span>EQUIVALENCE CONSENSUS METER</span>
@@ -195,8 +207,8 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
                       <span className="text-emerald-400">{compliant} COMPLIANT</span>
                     </div>
                   </section>
-                );
-              })()}
+                  );
+                })()}
 
               <section>
                 <div className="mb-2 text-[10px] tracking-widest text-slate-400">

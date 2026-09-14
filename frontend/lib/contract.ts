@@ -1,5 +1,17 @@
 import type { NetworkConfig, TreatyKind } from "./types";
-import { DEFAULT_NETWORK, DIPLOMATIC_CONTRACT_ADDRESS } from "./networks";
+import {
+  DEFAULT_NETWORK,
+  DIPLOMATIC_CONTRACT_ADDRESS,
+  genlayerChain,
+  type GenLayerChain,
+} from "./networks";
+
+// The subset of EIP-1193 an injected wallet has to expose for a write. The
+// SDK takes the provider and routes signing methods to it, so the key never
+// leaves the extension.
+interface Eip1193Provider {
+  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+}
 
 // ABI of the Westphalia intelligent contract (contracts/westphalia.py, GenVM
 // v0.3.0). Names, argument order, and mutability mirror the deployed
@@ -41,6 +53,22 @@ export const DIPLOMATIC_ABI: AbiEntry[] = [
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "address_hex", type: "string" }],
+  },
+  {
+    // Untrusted-input sanitizer, exposed on-chain for adversarial review.
+    type: "function",
+    name: "sanitize_preview",
+    stateMutability: "view",
+    inputs: [{ name: "s", type: "string" }],
+    outputs: [{ name: "sanitized", type: "string" }],
+  },
+  {
+    // SSRF guard, exposed on-chain for adversarial review.
+    type: "function",
+    name: "is_safe_url",
+    stateMutability: "view",
+    inputs: [{ name: "url", type: "string" }],
+    outputs: [{ name: "safe", type: "bool" }],
   },
   {
     type: "function",
@@ -220,34 +248,80 @@ export class DiplomaticContract {
   readonly address: string;
   readonly network: NetworkConfig;
   private client: unknown = null;
+  private reader: unknown = null;
 
   constructor(network: NetworkConfig = DEFAULT_NETWORK, address = DIPLOMATIC_CONTRACT_ADDRESS) {
     this.network = network;
     this.address = address;
   }
 
-  // Attempt to build a live GenLayer client. Returns false in read-only
-  // (reviewer) mode when no injected wallet or SDK is available.
+  // Attempt to build a live GenLayer client bound to the injected wallet.
+  //
+  // A client without an account cannot dispatch: genlayer-js throws "No
+  // account set. Configure the client with an account or pass an account to
+  // this function." before any calldata is built. So connect() asks the
+  // wallet for an address and hands the SDK the (address, provider) pair --
+  // the SDK routes eth_sendTransaction to the provider for a string account,
+  // which keeps the key inside the wallet extension and never in this bundle.
+  //
+  // Returns false in read-only (reviewer) mode when no injected wallet or SDK
+  // is available. Reads do not go through this client -- see readClient() --
+  // so a visitor without a wallet still sees live protocol state.
   async connect(): Promise<boolean> {
     if (typeof window === "undefined") return false;
     try {
       const sdk = (await import("genlayer-js").catch(() => null)) as
         | Record<string, unknown>
         | null;
-      const injected = (window as unknown as { ethereum?: unknown }).ethereum;
+      const injected = (window as unknown as { ethereum?: Eip1193Provider }).ethereum;
       if (!sdk || !injected) return false;
-      // The exact client factory is intentionally defensive: different
-      // genlayer-js releases expose slightly different entry points.
-      const factory =
-        (sdk.createClient as ((cfg: unknown) => unknown) | undefined) ??
-        (sdk.createAccount as ((cfg: unknown) => unknown) | undefined);
+      const factory = sdk.createClient as ((cfg: unknown) => unknown) | undefined;
       if (typeof factory !== "function") return false;
+      const chain = genlayerChain(
+        this.network,
+        sdk.chains as Record<string, GenLayerChain> | undefined
+      );
+      if (!chain) return false;
+      const accounts = (await injected.request({
+        method: "eth_requestAccounts",
+      })) as string[] | undefined;
+      const account = accounts?.[0];
+      if (!account) return false;
       this.client = factory({
-        chain: { id: this.network.chainId, rpcUrl: this.network.rpcUrl },
+        chain,
+        account,
+        provider: injected,
       });
       return true;
     } catch {
       return false;
+    }
+  }
+
+  // An account-less client, used for every view call.
+  //
+  // GenLayer answers views over `gen_call`, which needs no signer, so the board
+  // can render real protocol state before anyone connects a wallet. Reads
+  // deliberately do not reuse the connected client: they must behave the same
+  // before and after connect, and must never depend on wallet state.
+  private async readClient(): Promise<unknown> {
+    if (this.reader !== null) return this.reader;
+    if (typeof window === "undefined") return null;
+    try {
+      const sdk = (await import("genlayer-js").catch(() => null)) as
+        | Record<string, unknown>
+        | null;
+      const factory = sdk?.createClient as ((cfg: unknown) => unknown) | undefined;
+      if (typeof factory !== "function") return null;
+      const chain = genlayerChain(
+        this.network,
+        sdk?.chains as Record<string, GenLayerChain> | undefined
+      );
+      if (!chain) return null;
+      this.reader = factory({ chain });
+      return this.reader;
+    } catch {
+      return null;
     }
   }
 
@@ -359,10 +433,20 @@ export class DiplomaticContract {
     // Live path. Failures are surfaced to the caller (the pipeline renders
     // them as reverts) instead of being masked as simulated receipts.
     const client = this.client as {
+      estimateTransactionFees?: (args: unknown) => Promise<unknown>;
       writeContract?: (cfg: unknown) => Promise<{ hash?: string } | string>;
     };
     if (typeof client.writeContract !== "function") {
       return { hash: pseudoHash(seed), simulated: true, method, summary };
+    }
+    // Fee injection. Studio Net has no fee-manager contract: the SDK derives
+    // the fee from the chain's live fee policy, but only when it is asked to.
+    // Omitting `fees` leaves feeValue at 0 and the consensus contract rejects
+    // the transaction with FeeValueMustBeNonZero(1). This estimate is what
+    // makes the fee nonzero.
+    let fees: unknown;
+    if (typeof client.estimateTransactionFees === "function") {
+      fees = await client.estimateTransactionFees({});
     }
     const res = await client.writeContract({
       address: this.address,
@@ -370,20 +454,20 @@ export class DiplomaticContract {
       functionName: method,
       args,
       value,
+      fees,
     });
     const hash = typeof res === "string" ? res : res.hash ?? pseudoHash(seed);
     return { hash, simulated: false, method, summary };
   }
 
-  // Read a view method. Returns null when no live client is available or the
-  // call fails (caller decides how to degrade).
+  // Read a view method. Returns null when the SDK is unavailable or the call
+  // fails (caller decides how to degrade). Works without a wallet.
   async read<T = unknown>(method: string, args: unknown[] = []): Promise<T | null> {
-    if (!this.connected) return null;
     try {
-      const client = this.client as {
+      const client = (await this.readClient()) as {
         readContract?: (cfg: unknown) => Promise<unknown>;
-      };
-      if (typeof client.readContract !== "function") return null;
+      } | null;
+      if (!client || typeof client.readContract !== "function") return null;
       return (await client.readContract({
         address: this.address,
         abi: DIPLOMATIC_ABI,
