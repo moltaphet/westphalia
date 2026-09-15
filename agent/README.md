@@ -16,7 +16,7 @@ agent/
   demo.py       two-agent duet: founding -> proposal -> rejection -> adaptation ->
                 ratification -> adjudication
   seed.py       the wider roster: four more identities plus the treaties that
-                connect them (the board only sees enclaves that hold one)
+                connect them into a topology the board can show
   test_decider.py    unit tests for the heuristic (no chain, no I/O)
   test_telemetry.py  unit tests for the feeds (no chain, no I/O)
 ```
@@ -201,14 +201,21 @@ that, but a seeded proposal outside the band is one the counterparty's charter
 obliges it to refuse, and storing one would make the on-chain record read as a
 fabrication rather than a history.
 
-**Why founding alone is not enough.** The contract has no enclave enumerator:
-it answers `get_enclave(address)` and nothing lists addresses, so the frontend
-derives the enclave set transitively by walking the treaties and collecting
-both parties. An enclave that has never been party to a treaty is real
-on-chain and invisible on the board. `seed.py` therefore proposes a treaty for
-each identity rather than only founding it, and ratifies by default so the
-pacts read as live agreements and their bonds land in the escrow the board
-counts. `--no-ratify` gives a cheaper run that only needs the islands drawn.
+**Why a treaty, and not just a founding.** The board lists enclaves from the
+contract's enumerable roster -- `get_enclave_count` gives the total and
+`get_enclave_by_index` resolves each slot -- so founding an identity is enough
+to make its island appear. (That index is recent. Before it, the contract
+answered only `get_enclave(address)` and nothing listed addresses, so the
+frontend had to derive the set by walking treaties and collecting both parties,
+and an enclave that had never been party to a treaty was real on-chain and
+invisible on the board.)
+
+A treaty is still what makes an identity *legible* as a sovereign rather than a
+dot: it carries the bond, the typed parameters, and the escrow the board counts
+in `locked_escrow`. `seed.py` therefore proposes one for each identity and
+ratifies by default, so the pacts read as live agreements and their bonds land
+in the escrow the treasury view totals. `--no-ratify` gives a cheaper run that
+only needs the islands drawn.
 
 Every step re-reads chain state before it acts, so the script is idempotent and
 resumable: a run interrupted after six of eighteen transactions picks up at the
@@ -216,12 +223,18 @@ seventh, and nothing is ever submitted twice.
 
 ## On-chain interface used
 
-Contract `0xB78A41624fe09163fee3159091E907B7b7Af9D00` on studio-dev (chain 61997).
+Contract `0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41` on studio-dev (chain 61997).
 
-- views: `get_protocol_overview`, `get_enclave`, `get_treaty`,
-  `required_dispute_bond`, `claimable_of`
+- views: `get_protocol_overview`, `get_enclave`, `get_enclave_count`,
+  `get_enclave_by_index`, `get_treaty`, `required_dispute_bond`, `claimable_of`
 - writes: `found_sovereignty` (payable), `propose_treaty` (payable),
-  `ratify_treaty` (payable), `trigger_dispute` (payable)
+  `ratify_treaty` (payable), `cancel_proposal`, `trigger_dispute` (payable)
+
+`cancel_proposal` is the newest of these and is not yet wired into a profile:
+nothing in the agent loop withdraws an offer it has standing, because
+`decider.py` supersedes a stalled proposal with a new one instead. It exists for
+the proposer whose counterparty never answers at all -- without it that bond, and
+the collateral exit it gates, stay locked until expiry.
 
 Writes carry an explicit fee distribution. The accurate path is
 `estimate_transaction_fees_for_write`, but that pre-flight simulation executes

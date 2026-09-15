@@ -6,13 +6,13 @@ by a GenLayer validator quorum -- rendered as an interactive 3D voxel war room.
 
 | | |
 |---|---|
-| **Live contract** | [`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-dev.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00) |
+| **Live contract** | [`0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41`](https://explorer-studio-dev.genlayer.com/address/0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41) |
 | **Network** | GenLayer Studio Net, chain 61997 |
 | **Explorer** | https://explorer-studio-dev.genlayer.com |
 | **Contract source** | [`contracts/westphalia.py`](contracts/westphalia.py) |
 | **Runner** | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
-| **Tests** | 56 passing (33 contract + 23 agent); 5 integration tests need a live network |
-| **Demo video** | _TODO: link before final submission_ |
+| **Tests** | 59 passing (36 contract + 23 agent); 5 integration tests need a live network |
+| **Demo video** | [Demo Video Placeholder - Required for Submission] |
 | **Reviewer quickstart** | [Quickstart for reviewers](#quickstart-for-reviewers) |
 
 ---
@@ -74,7 +74,7 @@ Three artifacts make up the repository:
 
 | Artifact | Path | What it is |
 |---|---|---|
-| Intelligent contract | `contracts/westphalia.py` | The entire protocol. 19 public methods, 9 view / 10 write. |
+| Intelligent contract | `contracts/westphalia.py` | The entire protocol. 22 public methods, 11 view / 11 write. |
 | Frontend dApp | `frontend/` | The board, the HUD, and the four analysis views. |
 | Autonomous agents | `agent/` | Two LLM-driven negotiators that found enclaves, negotiate, and litigate without a human. |
 
@@ -277,14 +277,24 @@ counterparty retains full dispute standing throughout the notice window.
 `dissolve_treaty` is the amicable path: both parties sign, both bonds return,
 zero penalty.
 
+A third hatch covers the stage before a treaty exists. A `PROPOSED` treaty that
+the counterparty neither ratifies nor rejects holds the proposer's bond -- and,
+through `open_treaties`, blocks the proposer's own collateral exit -- until it
+expires, which can be a year away. `cancel_proposal` lets the proposer reclaim
+that bond unilaterally while the treaty is still `PROPOSED`. Only `party_a` may
+call it, and only while the counterparty has posted nothing, so no counterparty
+value is ever touched.
+
 ## 5. Contract architecture
 
 ### 5.1 Storage
 
-`contracts/westphalia.py` declares twelve storage slots on `Westphalia`, plus
-two storage-enabled dataclasses (`Enclave`, `Treaty`) -- decorated
-`@gl.storage.allow` here, which is the spelling this contract's pinned runner
-exposes; see the note in section 5 on why that is not `@allow_storage`.
+`contracts/westphalia.py` declares fourteen storage slots on `Westphalia`, plus
+two storage-enabled dataclasses (`Enclave`, `Treaty`). The dataclasses are
+decorated `@allow_storage`, a module-level alias bound to `gl.storage.allow` --
+the same decorator object under the bare name `genvm-lint`'s `E014` check matches
+on. The alias changes the *name the linter sees*, not the decorator's behaviour;
+see the note in section 5 on why it is not `@gl.allow_storage`.
 
 | Slot | Type | Purpose |
 |---|---|---|
@@ -294,18 +304,25 @@ exposes; see the note in section 5 on why that is not `@allow_storage`.
 | `replay` | `TreeMap[str, bool]` | Deterministic dispute replay index. |
 | `open_treaties` | `TreeMap[str, u256]` | Address hex -> count of bond-locking treaties. |
 | `rep_history` | `TreeMap[str, u256]` | Address hex -> last known reputation (survives exit). |
-| `next_treaty_id` | `u256` | Monotonic treaty counter. Also the enumeration handle. |
+| `next_treaty_id` | `u256` | Monotonic treaty counter. Also the treaty enumeration handle. |
 | `total_collateral` | `u256` | Solvency component. |
 | `locked_escrow` | `u256` | Solvency component. |
 | `reserves` | `u256` | Solvency component, governor-spendable. |
 | `total_claimable` | `u256` | Solvency component. |
 | `governor` | `Address` | Treasury steward; the deployer at genesis. |
+| `enclave_index` | `TreeMap[u256, str]` | Sequential roster slot -> owner address hex. |
+| `enclave_count` | `u256` | Monotonic count of enclaves ever founded. |
 
-Note what is *absent*: there is no enclave enumerator. `get_enclave` requires an
-address. A client that wants to list enclaves must reach them transitively --
-enumerate treaties through `next_treaty_id`, then resolve each `party_a` and
-`party_b`. The frontend does exactly this, which is why a sovereignty that has
-never been party to a treaty is readable but not discoverable.
+The last two make the roster enumerable. `get_enclave` alone answers only for an
+address a client already knows, so the set used to be derived transitively --
+enumerate treaties through `next_treaty_id`, resolve each `party_a` and
+`party_b` -- and a sovereignty that had never been party to a treaty was
+readable but not discoverable. `get_enclave_count` plus `get_enclave_by_index`
+lists every enclave directly. Both fields were appended *after* `governor`
+rather than inserted: storage layout is positional, so an inserted field would
+shift every slot below it. A slot whose enclave later withdrew is a
+**tombstone** (`exists: false`) -- the count never rewinds, so a client can
+enumerate safely while the roster changes underneath it.
 
 ### 5.2 Constants
 
@@ -329,32 +346,35 @@ All economic parameters are module constants, not magic numbers.
 
 ### 5.3 Public surface
 
-19 public methods: 9 view, 10 write. The ABI in `frontend/lib/contract.ts`
-mirrors this exactly.
+22 public methods: 11 view, 11 write. The ABI in `frontend/lib/contract.ts`
+mirrors this exactly, and `scripts/check_abi.py` fails the build if it drifts.
 
 | # | Method | Kind | Payable | Purpose |
 |---|---|---|---|---|
 | 1 | `get_protocol_overview` | view | | Solvency counters, `next_treaty_id`, `solvent` flag. |
 | 2 | `get_treaty` | view | | One treaty record by id. |
 | 3 | `get_enclave` | view | | One enclave record by owner hex. |
-| 4 | `whoami` | view | | The caller's address, as the contract sees it. |
-| 5 | `sanitize_preview` | view | | Preview of the ASCII sanitizer applied to untrusted text. |
-| 6 | `is_safe_url` | view | | Preview of the SSRF gate applied to a telemetry URL. |
-| 7 | `claimable_of` | view | | Pull-pattern balance for an address. |
-| 8 | `locked_treaty_count` | view | | Bond-locking treaties for an address. |
-| 9 | `required_dispute_bond` | view | | Reputation-scaled bond a plaintiff would need. |
-| 10 | `found_sovereignty` | write | yes | Post collateral, register an enclave. |
-| 11 | `propose_treaty` | write | yes | Open a treaty with bond, clause, params, oracles. |
-| 12 | `ratify_treaty` | write | yes | Counterparty accepts with a matching bond. |
-| 13 | `dissolve_treaty` | write | | Amicable mutual dissolution; both bonds refunded. |
-| 14 | `exit_treaty` | write | | Unilateral exit after notice, at a 10% own-bond penalty. |
-| 15 | `trigger_dispute` | write | yes | File a breach; oracles come from treaty storage. |
-| 16 | `claim_payout` | write | | Withdraw a credited balance. |
-| 17 | `drain_reserves` | write | | Governor-only treasury exit. |
-| 18 | `recover_bond` | write | | Reclaim a bond from an EXPIRED treaty. |
-| 19 | `withdraw_collateral` | write | | Sovereign exit, gated on zero locked bonds. |
+| 4 | `get_enclave_count` | view | | Enclaves ever founded. The roster enumeration handle. |
+| 5 | `get_enclave_by_index` | view | | The enclave at a roster slot, with `exists` false for a tombstone. |
+| 6 | `whoami` | view | | The caller's address, as the contract sees it. |
+| 7 | `sanitize_preview` | view | | Preview of the ASCII sanitizer applied to untrusted text. |
+| 8 | `is_safe_url` | view | | Preview of the SSRF gate applied to a telemetry URL. |
+| 9 | `claimable_of` | view | | Pull-pattern balance for an address. |
+| 10 | `locked_treaty_count` | view | | Bond-locking treaties for an address. |
+| 11 | `required_dispute_bond` | view | | Reputation-scaled bond a plaintiff would need. |
+| 12 | `found_sovereignty` | write | yes | Post collateral, register an enclave. |
+| 13 | `propose_treaty` | write | yes | Open a treaty with bond, clause, params, oracles. |
+| 14 | `ratify_treaty` | write | yes | Counterparty accepts with a matching bond. |
+| 15 | `cancel_proposal` | write | | Proposer reclaims its bond from a still-`PROPOSED` treaty. |
+| 16 | `dissolve_treaty` | write | | Amicable mutual dissolution; both bonds refunded. |
+| 17 | `exit_treaty` | write | | Unilateral exit after notice, at a 10% own-bond penalty. |
+| 18 | `trigger_dispute` | write | yes | File a breach; oracles come from treaty storage. |
+| 19 | `claim_payout` | write | | Withdraw a credited balance. |
+| 20 | `drain_reserves` | write | | Governor-only treasury exit. |
+| 21 | `recover_bond` | write | | Reclaim a bond from an EXPIRED treaty. |
+| 22 | `withdraw_collateral` | write | | Sovereign exit, gated on zero locked bonds. |
 
-Methods 5 and 6 exist as *pure functions of the same code path* the contract
+Methods 7 and 8 exist as *pure functions of the same code path* the contract
 uses internally. They make the sanitizer and the SSRF gate independently
 testable and inspectable from outside, which is why the frontend can assert
 behavior against them rather than trusting a description.
@@ -461,9 +481,17 @@ The command bar badges where the state came from:
 
 | Badge | Meaning |
 |---|---|
+| `READING CHAIN` | The first read has not resolved yet. The board holds no islands and the telemetry figures read `--`, rather than the zeros an empty board would sum to. |
 | `ON-CHAIN` | The contract answered and returned protocol state. |
 | `ON-CHAIN / EMPTY` | The contract answered; it holds no enclaves yet. |
 | `SIMULATED` | The contract was unreachable; the board fell back to seed data and says so. |
+
+The board starts **empty**, not seeded. It used to open on the reviewer seed and
+swap to the live archipelago when the first read landed, which meant every
+visitor saw a flash of fabricated protocol state -- islands appearing out of
+nowhere and others changing identity -- on a board whose entire claim is that it
+is not a mock. The seed is now installed only when a read actually fails, which
+is what `SIMULATED` reports.
 
 ### 6.4 Write path
 
@@ -593,19 +621,42 @@ rejection rationale is composed from Bob's own charter against Alice's actual
 call-data, and the verdict comes back from GenLayer's validators, not from the
 agents.
 
+**Four more identities widen the archipelago.** Two agents are enough to narrate
+the protocol; they are not enough to show it, because the board never leaves its
+inner ring and a topology is indistinguishable from a line. `agent/seed.py`
+founds a further roster and wires the treaties that hold them together:
+
+| Key | Name | Archetype | Posture | Accepts |
+|---|---|---|---|---|
+| `vantage` | Vantage | Liquidity Nexus | proactive | `TRADE_CORRIDOR`, `DATA_SHARING` |
+| `aegis` | Aegis | Defense Vanguard | reactive | `NON_AGGRESSION` |
+| `quorum` | Quorum | Oracle Collective | proactive | `DATA_SHARING` |
+| `solstice` | Solstice | Autonomous Arbiter | proactive | all three kinds |
+
+Each is a full `Profile`, so any of them can also be driven by the autonomous
+loop on its own: `.venv/bin/python -m agent.agent --profile quorum`. The script
+wires a star centred on Halcyon plus a three-link mesh inside the ring, so no
+new identity is only ever a leaf, and narrows every offer's parameters to the
+counterparty's own declared band -- an offer outside it is one the
+counterparty's charter obliges it to refuse. Every step re-reads chain state
+before it acts, so a run interrupted partway resumes instead of submitting
+anything twice.
+
 ## 8. Repository layout
 
 ```
 contracts/
-  westphalia.py           The protocol. 19 public methods.
+  westphalia.py           The protocol. 22 public methods.
 
 tests/
-  direct/                 In-memory contract suite (33 tests, ~45s). No network.
+  direct/                 In-memory contract suite (36 tests, ~45s). No network.
     conftest.py           GenVM v0.3 harness wiring.
     test_westphalia.py    9 baseline adversarial cases.
     test_westphalia_v2.py 6 V2 protocol cases.
     test_adversarial_exploits.py  13 red-team regressions incl. forged-oracle PoC.
     test_poc_regressions.py 5 post-audit P1-P4 PoC regressions.
+    test_westphalia_v3.py 3 V3.1 cases: proposal cancellation, roster index,
+                          claim-payout fund safety.
   integration/            Full-consensus suite (5 tests). Needs a live network.
     test_westphalia.py    Deploy, found, propose, ratify, dispute, settle.
     fixtures.py           Expected state, kept beside the assertions that read it.
@@ -616,7 +667,10 @@ agent/                    Two-agent autonomous duet (23 tests).
   profiles.py             ALICE / BOB charters, archetypes, constraints.
   telemetry.py            Deterministic oracle-feed arithmetic.
   chain.py                GenLayer client wrapper: funding, views, writes, receipts.
+  keys.py                 Per-agent keystore (agent/keys/<name>.key.json, 0600).
   demo.py                 The end-to-end duet.
+  seed.py                 The wider roster: four more identities plus the
+                          treaties that connect them.
   test_*.py               Negotiation, telemetry, and receipt-parsing tests.
 
 frontend/
@@ -698,7 +752,7 @@ by the 0.29.x-era harness, so `genlayer-test` is pinned to the `0.30.0rc2`
 pre-release and installation needs `--prerelease=allow` -- a flag plain `pip`
 does not have. `uv` is the shortest path; `pip install --pre` also works.
 
-## Quickstart for reviewers
+## 2. Quickstart for reviewers
 
 Three independent ways to verify this submission, cheapest first.
 
@@ -714,31 +768,38 @@ npm run dev          # http://localhost:3000
 Click **ENTER THE ARCHIPELAGO**. **No wallet is needed and nothing is mocked**:
 the board reads the deployed contract directly. Confirm it yourself:
 
-- The command bar badges the state source as `ON-CHAIN`, `ON-CHAIN / EMPTY`, or
-  `SIMULATED`. If the contract were unreachable it would read `SIMULATED` and
-  the islands would be seed data.
-- The islands you see are the sovereignties the protocol actually holds --
-  reached transitively, since the contract has no enclave enumerator: treaties
-  are enumerated through `next_treaty_id`, and each treaty's parties resolve to
-  their enclave records. A contract with no treaties shows an empty
-  archipelago, which is what `ON-CHAIN / EMPTY` means.
+- The command bar badges the state source as `READING CHAIN`, `ON-CHAIN`,
+  `ON-CHAIN / EMPTY`, or `SIMULATED`. If the contract were unreachable it would
+  read `SIMULATED` and the islands would be seed data. (`READING CHAIN` is the
+  first read still in flight; the board holds no islands until it answers, and
+  the telemetry figures read `--` rather than a measured zero.)
+- The islands you see are the sovereignties the protocol actually holds, read
+  from the contract's enumerable roster: `get_enclave_count` gives the total and
+  `get_enclave_by_index` resolves each slot, so an enclave that has never been
+  party to a treaty is still drawn. Treaty parties are merged in as a fallback
+  for any address the index does not cover.
 - **TOTAL VALUE LOCKED** and the solvency badge are read live from
   `get_protocol_overview` and reconcile against the explorer.
 
-Against the deployment recorded in this repository you should see, specifically:
+That address is a **fresh deployment, and it is empty**. Nothing has been
+founded on it yet, so the board reads `ON-CHAIN / EMPTY`, the archipelago holds
+zero islands, and `get_enclave_count` answers `0`. That is the honest reading of
+a new deployment rather than a fault -- and the `0` is itself evidence, because
+a contract without the roster index would not answer the call at all.
 
-- Badge reading `ON-CHAIN`, with **two islands**: Halcyon and Meridian.
-- **TOTAL VALUE LOCKED** of **700 GEN (chain)** -- read straight from the
-  contract's `locked_escrow`, which is Halcyon's still-standing 700 GEN offer
-  and nothing else. The settled treaty's 500 GEN bond is *not* counted: the
-  mapping only sums bonds of treaties the contract still holds, so a `SETTLED`
-  treaty stops contributing the moment escrow is released.
-- Halcyon carries a **1500 GEN** settlement credit awaiting withdrawal (the
-  `pull`-pattern `claimable` balance), and Meridian renders behind a red
-  **containment grid** because the quorum's `CRITICAL_BREACH` verdict set its
-  status to `SANCTIONED`.
-- Both figures reconcile against the live counters in
-  [Appendix A](#a-deployment-record) and against the explorer.
+To fill it, run the two agent tutorials below (about twenty minutes together):
+
+```bash
+.venv/bin/python -m agent.demo       # Halcyon and Meridian, through to a verdict
+.venv/bin/python -m agent.seed       # Vantage, Aegis, Quorum, Solstice + treaties
+```
+
+A completed run leaves the board reading `ON-CHAIN` with **six islands** and
+**TOTAL VALUE LOCKED** of **4300 GEN (chain)**, read straight from the
+contract's `locked_escrow`. Those are the figures the superseded deployment
+reached from this same starting state -- `agent/chain.py` already points at the
+address above, so the same two scripts drive it -- and every one of them is then
+verifiable against `get_protocol_overview` and the explorer.
 
 Reads need no wallet. **Writes do**: clicking a propose/ratify/dispute action
 without a wallet produces a receipt labelled *simulated* and the command bar
@@ -749,22 +810,25 @@ With a wallet connected, the same click opens the **Transaction Kit approval
 gate** over the board: the call's fee quote (deposit split across time units,
 execution budget and message fees), the network's current price caps, the
 pending-queue depth for your account, and a badge reporting whether the quoted
-fee policy still matches the chain's. Nothing is dispatched until you sign. On
-the recorded deployment the quote reads `source: network-default` and
-`verification: verified`, which is what a healthy Studio Net quote looks like.
+fee policy still matches the chain's. Nothing is dispatched until you sign. The
+quote reads `source: network-default` and `verification: verified`, which is a
+property of Studio Net's live fee policy rather than of this contract, and is
+what a healthy quote looks like there.
 
 ### Run the contract test suite (about three minutes)
 
 ```bash
 uv venv --python 3.12
 uv pip install --prerelease=allow -r requirements.txt
-.venv/bin/python -m pytest -q          # 56 passed
+.venv/bin/python -m pytest -q          # 59 passed
 ```
 
 This runs the contract **in memory** -- no chain, no keys, no network. It covers
 the baseline adversarial cases, the V2 protocol, thirteen red-team exploit
-regressions, and the P1-P4 post-audit PoCs, each of which was confirmed as a
-working exploit against an earlier revision before it was fixed.
+regressions, the P1-P4 post-audit PoCs, and the V3.1 hardening cases (proposal
+cancellation, the roster index, claim-payout fund safety), each of which was
+confirmed as a working exploit or a real fault against an earlier revision
+before it was fixed.
 
 ### Run the autonomous agents against the live chain (about ten minutes)
 
@@ -781,7 +845,7 @@ the dispute.
 ### Verify the deployment on the explorer
 
 Contract:
-[`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-dev.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00)
+[`0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41`](https://explorer-studio-dev.genlayer.com/address/0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41)
 on GenLayer Studio Net (chain 61997).
 
 GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live
@@ -849,14 +913,14 @@ wallet: it is chmod 0600 for a reason.
 
 Two runners, for two kinds of test.
 
-**Bare `pytest` runs the offline suites** -- 56 tests, no network, no keys, no
+**Bare `pytest` runs the offline suites** -- 59 tests, no network, no keys, no
 funded account:
 
 ```bash
-# Both suites: 56 tests.
+# Both suites: 59 tests.
 .venv/bin/python -m pytest -q
 
-# Contract only: 33 tests, in-memory, ~45s.
+# Contract only: 36 tests, in-memory, ~45s.
 .venv/bin/python -m pytest tests/direct/ -q
 
 # Agents only: 23 tests.
@@ -929,12 +993,11 @@ Static analysis of the contract:
 ```
 
 `genvm-linter` is pinned in `requirements.txt`, so these work after the install
-steps above. `Validation passed`, the method census (19 methods: 9 view, 10
+steps above. `Validation passed`, the method census (22 methods: 11 view, 11
 write), `No type errors found`, and the ABI comparison are all stable.
+`genvm-lint check` runs all three and passes.
 
-`genvm-lint check` -- the command the linter's own README leads with -- is
-**not** used here, because it exits 1 on this contract for a reason that is not
-a defect. The note below is the whole story.
+The note below records why that check used to exit 1, and what changed.
 
 The agent suite's fixtures are built from two *real observed payloads* -- an
 agreed return and the `ERR_INSUFFICIENT_BOND` revert a stale dispute bond
@@ -943,8 +1006,8 @@ hand-written idealization.
 
 #### Note on the storage-decorator spelling
 
-`genvm-lint lint` reports two `E014` errors on this contract, which is why
-`genvm-lint check` exits 1:
+`genvm-lint lint` reported two `E014` errors on the previous revision of this
+contract, where the dataclasses were decorated `@gl.storage.allow` directly:
 
 ```
 line 461: Class 'Enclave' used in storage needs @allow_storage decorator
@@ -960,10 +1023,23 @@ if dec_name in ("allow_storage", "gl.allow_storage"):
 ```
 
 The rendering is not the problem: `_decorator_to_string` walks the attribute
-chain, so this contract's `@gl.storage.allow` stringifies faithfully to
-`"gl.storage.allow"`. It simply is not one of the two names listed, so the
-check never records the decorator as seen and reports both dataclasses as
-missing it. They are not missing it.
+chain, so `@gl.storage.allow` stringifies faithfully to `"gl.storage.allow"`. It
+simply is not one of the two names listed, so the check never records the
+decorator as seen and reports both dataclasses as missing it. They are not
+missing it.
+
+The contract now binds the bare name to the same object, which satisfies the
+check without changing what runs:
+
+```python
+allow_storage = gl.storage.allow
+```
+
+That is an alias, not a substitution. The decorator object applied to `Enclave`
+and `Treaty` is byte-for-byte the one this contract has always deployed with;
+only the *name the linter matches on* is new. `genvm-lint check` now passes all
+three of its checks, and `lint`/`validate`/`typecheck` agree instead of
+disagreeing.
 
 The list is not arbitrary, it is **stale** -- written against an earlier
 generation of the SDK. The Python std library changed shape, and with it the
@@ -992,16 +1068,17 @@ names that build:
 {"Depends": "py-lib-genlayer-std:kzr02ndm9et4qkmbqpq5djjt5sme2yt76n7sz1qbzax0knt6mam0"}
 ```
 
-So `@gl.storage.allow` is not a preference; against this runner it is the only
-spelling that exists. Rewriting both decorators to `@gl.allow_storage` makes all
-33 contract tests fail with an import error -- measured, not assumed -- because
+So `gl.storage.allow` is not a preference; against this runner it is the only
+object that exists. Rewriting both decorators to `@gl.allow_storage` makes all
+36 contract tests fail with an import error -- measured, not assumed -- because
 the SDK the runner loads has no such symbol.
 
 There is no newer linter to wait for, either: `0.11.1rc2` -- what
 `requirements.txt` pins -- is *ahead* of PyPI's latest stable, `0.11.0`, and the
-`v0.11.1-rc.2` release commit still carries the two-name list. So the choice is
-to run `lint` and accept two permanent false errors, or to gate on the layers
-that are actually load-bearing. This repository does the second:
+`v0.11.1-rc.2` release commit still carries the two-name list. The alias above
+satisfies that list without waiting for it. What the alias cannot do is make the
+linter's *other* layers meaningful, so this repository still gates on the layers
+that are actually load-bearing:
 
 - `genvm-lint validate` imports the contract under the exact SDK its runner
   pins -- the ground truth `E014` only approximates from the AST. If either
@@ -1093,9 +1170,10 @@ not a loud one.
 | The approval gate never opens | No signer. `write()` short-circuits to a simulated receipt when the client is not connected. | Connect a wallet; the command bar shows whether one is linked. |
 | `Cannot convert undefined to a BigInt` | The chain object was hand-built instead of taken from the SDK. | Spread `chains.studioDevnet`; override only `rpcUrls`. |
 | `No account set` | The client has no account. | Connect an injected wallet, or pass an account. |
-| `E014 ... needs @allow_storage decorator` from `genvm-lint` | The linter's `E014` list predates the decorator spelling this contract's pinned runner exposes. A false positive, not a contract defect -- and why CI runs `validate`, `typecheck` and `check_abi.py` instead of `genvm-lint check`. | See the decorator note in section 5; the 33-test suite executes the contract for real. |
+| `E014 ... needs @allow_storage decorator` from `genvm-lint` | The linter's `E014` list names the two spellings it was written against, and the pinned runner exposes a third. A false positive, not a contract defect. | Already handled: the contract binds `allow_storage = gl.storage.allow`, so `genvm-lint check` passes. See the decorator note in section 5; the 36-test suite executes the contract for real. |
 | `Missing or invalid parameters` on a view | Usually correct: the row does not exist. `get_treaty(1)` on a contract whose `next_treaty_id` is 1 is an expected revert, not a fault. | Check `next_treaty_id` first. |
-| Board reads `ON-CHAIN / EMPTY` | The contract answered and holds no treaties. Enclaves are reached through treaties. | Run the agents (section 4), or point at a populated deployment. |
+| Board reads `ON-CHAIN / EMPTY` | The contract answered and holds no enclaves. `get_enclave_count` returns `0`. This is what a freshly deployed contract reads. | Run the agents (sections 3 and 4), or point at a populated deployment. |
+| Board reads `READING CHAIN` and stays there | The first read never resolved. | Check `NEXT_PUBLIC_GENLAYER_RPC_URL` and network access; a failed read eventually falls back to `SIMULATED`. |
 | Board reads `SIMULATED` | The contract was unreachable. | Check `NEXT_PUBLIC_GENLAYER_RPC_URL` and network access. |
 | `eth_getCode` returns `0x` for a live contract | GenVM is not an EVM chain. | Expected. Verify with view reads instead. |
 
@@ -1108,11 +1186,12 @@ not a loud one.
 | Field | Value |
 |---|---|
 | Network | GenLayer Studio Net (dev), chain 61997 |
-| Contract | `0xB78A41624fe09163fee3159091E907B7b7Af9D00` |
+| Contract | `0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41` |
 | RPC | `https://studio-next.genlayer.com/api` |
 | Runner | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
 | Source | `contracts/westphalia.py` |
-| Source SHA-256 | `aa87a828a401eef55a72058eb6bcc95ee3e869b7c940b10bef23e8c71050845a` |
+| Revision | V3.1 -- enumerable enclave roster (`get_enclave_count`, `get_enclave_by_index`), `cancel_proposal`, a `claim_payout` fund-safety guard, and bytes/str telemetry-body resilience. |
+| Source SHA-256 | `b4ac8d14b99b23fb5e226ec25aa0af6ff4d17103b181bf72e4cbe5b23061cf64` |
 
 Full observed state, at deploy time and at the current head, is recorded in
 [`deployments/studio-dev.json`](deployments/studio-dev.json). That file is the
@@ -1120,58 +1199,63 @@ authoritative record; it is updated by reading the chain, never by hand.
 
 ### Live state at the current head
 
-The contract was deployed empty and then driven to its present state by
-`agent/demo.py` -- the full lifecycle, with no human in the loop:
+The address is a fresh deployment and is **empty**. Read from the contract:
 
 | Counter | Value |
 |---|---|
-| `balance` | 2500 GEN |
-| `total_collateral` | 300 GEN |
-| `locked_escrow` | 700 GEN |
+| `balance` | 0 GEN |
+| `total_collateral` | 0 GEN |
+| `locked_escrow` | 0 GEN |
 | `reserves` | 0 GEN |
-| `total_claimable` | 1500 GEN |
-| `next_treaty_id` | 3 |
+| `total_claimable` | 0 GEN |
+| `next_treaty_id` | 1 |
+| `get_enclave_count` | 0 |
 | `solvent` | `true` |
 
-```
-total_collateral + locked_escrow + reserves + total_claimable == balance
-    300         +      700       +    0     +      1500          ==  2500
-```
+`get_enclave_count` answering `0` is also evidence about *which* revision is
+deployed: a contract without the roster index has no such method, and the call
+reverts instead. See the deployment record's `verification` block.
 
-| Treaty | Status | Kind | What happened |
-|---|---|---|---|
-| #1 | `PROPOSED` | `DATA_SHARING` | Alice's deliberately loose opening offer (700 GEN bond). Meridian rejected it on four enumerated charter violations; the bond remains locked because the offer still stands. |
-| #2 | `SETTLED` | `DATA_SHARING` | The compliant superseding offer. Meridian ratified it, then Halcyon disputed it. The quorum returned `CRITICAL_BREACH` and the escrow settled to zero. |
-
-| Enclave | Status | Reputation | Collateral | Claimable |
-|---|---|---|---|---|
-| Halcyon (Autonomous Arbiter) | `ACTIVE` | 65 | 150 GEN | 1500 GEN |
-| Meridian (Oracle Collective) | `SANCTIONED` | 0 | 150 GEN | 0 GEN |
-
-Meridian's reputation went 50 -> 0 and its status to `SANCTIONED` as the direct
-consequence of the adjudicated breach; Halcyon's went 50 -> 65 as the vindicated
-plaintiff. That is the protocol working end to end: prose in, evidence fetched
-under consensus, tier out, escrow moved, reputation rewritten.
+The populated end state -- what `agent/demo.py` followed by `agent/seed.py`
+produces -- is held by the superseded revision and recorded in
+[`deployments/studio-dev.json`](deployments/studio-dev.json) under
+`predecessors`, with each reading kept beside the address it came from. Read
+live, that address holds `total_collateral` 900 GEN, `locked_escrow` 4300 GEN,
+`total_claimable` 1500 GEN and `next_treaty_id` 10 over six sovereignties and
+nine treaties, with the solvency identity satisfied
+(`900 + 4300 + 0 + 1500 == 6700` GEN). It was superseded because it predates the
+roster index, not because anything in it failed.
 
 ## B. Verification log
 
 | Check | Command | Result |
 |---|---|---|
-| Contract lint | `.venv/bin/genvm-lint check contracts/westphalia.py` | Validation passed, 19 methods (9 view, 10 write). The lint half is linter-version dependent -- see the decorator note in section 5. |
-| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 33 passed. |
+| Contract lint | `.venv/bin/genvm-lint check contracts/westphalia.py` | Lint and validation both pass; 22 methods (11 view, 11 write). |
+| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 36 passed. |
 | Agent tests | `.venv/bin/python -m pytest agent/ -q` | 23 passed. |
-| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 56 collected. |
+| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 59 collected. |
 | Type check | `cd frontend && npx tsc --noEmit` | Exit 0, clean. |
+| Lint | `cd frontend && npx eslint . --max-warnings=0` | Exit 0, no warnings. |
 | Production build | `cd frontend && npm run build` | 0 TypeScript, lint, and SSR/Canvas errors. |
-| ABI fidelity | `DIPLOMATIC_ABI` entries vs `contracts/westphalia.py` public methods | 19 == 19, name-for-name identical (9 view / 4 payable / 6 nonpayable). |
-| Read path | Headless browser, no wallet, page rendered through CDP | Command bar reads `ON-CHAIN`; `TOTAL VALUE LOCKED` reads `700 GEN (chain)`; `SOVEREIGNTIES` reads `2`; `SOLVENCY` reads `OK`; both Halcyon and Meridian present; Meridian rendered sanctioned. |
+| ABI fidelity | `DIPLOMATIC_ABI` entries vs `contracts/westphalia.py` public methods | 22 == 22, name-for-name identical (11 view / 4 payable / 7 nonpayable). |
+| Deployment binding | Live `get_enclave_count` on the recorded address | Answers `0`. The call reverts on the superseded revision, so the roster index is genuinely deployed rather than merely present in the repository. |
 | Write path | `found_sovereignty` on chain 61997 | Receipt `FINISHED_WITH_RETURN`; collateral moved; `get_enclave` returns the record. |
 | End-to-end | `.venv/bin/python -m agent.demo` | Full lifecycle to a `CRITICAL_BREACH` verdict; escrow settled; reputation rewritten. |
-| Solvency | Live `get_protocol_overview` | `300 + 700 + 0 + 1500 == 2500` GEN, `solvent: true`. |
 | ASCII purity | every tracked file | All UI labels, code, variables, and comments are pure ASCII English. |
+
+The board rows below were captured against the **populated** deployment, before
+the current address replaced it (see [Appendix A](#a-deployment-record)); they
+are recorded with the deployment they were measured on rather than restated
+against an empty one:
+
+| Check | Command | Result |
+|---|---|---|
+| Read path | Headless browser, no wallet, page rendered through CDP against the populated deployment | Command bar reads `ON-CHAIN`; `TOTAL VALUE LOCKED` reads `700 GEN (chain)`; `SOVEREIGNTIES` reads `2`; `SOLVENCY` reads `OK`; both Halcyon and Meridian present; Meridian rendered sanctioned. |
+| Solvency | Live `get_protocol_overview` on the populated deployment | `300 + 700 + 0 + 1500 == 2500` GEN, `solvent: true`. |
 
 The board's mapping layer is checked against real captures: the collateral it
 derives sums to the contract's own `total_collateral`, the locked escrow sums to
 `locked_escrow`, and a settled treaty's released bonds are correctly excluded --
-which is exactly why `TOTAL VALUE LOCKED` reads 700 GEN and not 1200: the
-settled treaty's 500 GEN bond is no longer escrow the contract holds.
+which is exactly why `TOTAL VALUE LOCKED` read 700 GEN and not 1200 in that
+capture: the settled treaty's 500 GEN bond is no longer escrow the contract
+holds.

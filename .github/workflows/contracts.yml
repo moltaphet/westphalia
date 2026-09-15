@@ -37,11 +37,12 @@ jobs:
         with:
           path: ~/.cache/genvm-linter
           key: genvm-linter-${{ runner.os }}-${{ hashFiles('contracts/westphalia.py') }}
-      # `genvm-lint check` is deliberately NOT the gate here. Its AST layer
-      # reports two E014 false positives on this contract and exits 1, which
-      # would fail every push for a reason that is not a defect -- see README.md,
-      # "Note on the storage-decorator spelling". These three gates replace it,
-      # and unlike it, each one can only fail for a real reason.
+      # The contract binds `allow_storage = gl.storage.allow`, which satisfies
+      # the linter's AST layer without changing the decorator that runs, so
+      # `genvm-lint check` would pass here. These three gates are still the ones
+      # that carry weight: each imports or reflects the real contract, so each
+      # can only fail for a real reason. See README.md, "Note on the
+      # storage-decorator spelling", for what the AST layer was getting wrong.
       - name: Validate against the pinned SDK
         run: genvm-lint validate contracts/westphalia.py
       - name: Type check against the pinned SDK
@@ -61,7 +62,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      # 33 direct tests plus 23 agent tests, all in memory. No network, no
+      # 36 direct tests plus 23 agent tests, all in memory. No network, no
       # keys, no funded account -- see pyproject.toml for why testpaths names
       # the two suites rather than the tests/ directory.
       - run: pytest -q

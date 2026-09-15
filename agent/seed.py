@@ -1,4 +1,4 @@
-"""Found the wider archipelago and wire the treaties that make it visible.
+"""Found the wider archipelago and wire the treaties that give it a shape.
 
 ``agent.demo`` runs the two-agent duet: propose, reject, adapt, ratify,
 arbitrate. That arc needs exactly two identities and narrates the whole
@@ -12,13 +12,15 @@ a star with a mesh inside it.
 
 Two facts about the deployed contract shape what "wiring them in" has to mean:
 
-1. There is no enclave enumerator. The contract answers ``get_enclave`` for an
-   address and nothing lists addresses, so the board derives the enclave set
-   transitively by walking the treaties and collecting both parties. An enclave
-   that has never been party to a treaty exists on-chain and is invisible on
-   the board. Founding alone would therefore add four islands nothing can see;
-   each new identity needs at least one treaty, which is why this script does
-   both.
+1. The contract enumerates enclaves, so founding alone does put an island on the
+   board: ``get_enclave_count`` gives the total and ``get_enclave_by_index``
+   resolves each roster slot, and the board reads the set from those rather than
+   inferring it from treaty parties. (Before that index existed the contract
+   answered ``get_enclave`` for an address and nothing listed addresses, so the
+   board walked the treaties and collected both parties instead -- and an
+   enclave that had never been party to a treaty existed on-chain and was
+   invisible.) A treaty is still what makes an identity legible as a sovereign
+   rather than a dot, which is why this script does both.
 
 2. A PROPOSED treaty already records both party addresses, so the board sees
    both parties the moment a proposal lands. Ratification is what turns the
