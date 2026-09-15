@@ -14,6 +14,12 @@
 genlayer-test==0.30.0rc2
 genlayer-py==0.19.0rc2
 
+# The contract analyser. `validate` and `typecheck` are the gates CI runs;
+# `genvm-lint check` additionally runs the AST layer, which reports two
+# permanent E014 false positives on this contract -- see the note on the
+# storage-decorator spelling in README.md, section 5.
+genvm-linter==0.11.1rc2
+
 # Test runner.
 pytest==9.1.1
 

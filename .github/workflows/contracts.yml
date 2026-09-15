@@ -1,0 +1,67 @@
+name: Contracts
+
+# Analyses the intelligent contract and runs the two offline suites. The
+# integration suite is deliberately absent: it needs a live GenLayer network,
+# so it cannot be a merge gate. Run it by hand before a deployment --
+# see README.md, "Running the test suites".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  analyse-contract:
+    name: Analyse contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # The SDK that `validate` and `typecheck` load is downloaded on a cold
+      # cache (cached at ~/.cache/genvm-linter). Persisting it between runs
+      # keeps this job off the network on repeat pushes.
+      #
+      # If the release lookup is rate-limited or offline, the linter falls back
+      # to a pinned bundle rather than failing -- verified to be one that still
+      # carries the runner this contract's header names, so both gates below
+      # pass on that path too.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/genvm-linter
+          key: genvm-linter-${{ runner.os }}-${{ hashFiles('contracts/westphalia.py') }}
+      # `genvm-lint check` is deliberately NOT the gate here. Its AST layer
+      # reports two E014 false positives on this contract and exits 1, which
+      # would fail every push for a reason that is not a defect -- see README.md,
+      # "Note on the storage-decorator spelling". These three gates replace it,
+      # and unlike it, each one can only fail for a real reason.
+      - name: Validate against the pinned SDK
+        run: genvm-lint validate contracts/westphalia.py
+      - name: Type check against the pinned SDK
+        run: genvm-lint typecheck contracts/westphalia.py
+      # Guards the one place contract and frontend can drift silently: the
+      # hand-written DIPLOMATIC_ABI in frontend/lib/contract.ts.
+      - name: Frontend ABI matches the contract
+        run: python scripts/check_abi.py
+
+  test:
+    name: Direct and agent suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # 33 direct tests plus 23 agent tests, all in memory. No network, no
+      # keys, no funded account -- see pyproject.toml for why testpaths names
+      # the two suites rather than the tests/ directory.
+      - run: pytest -q
