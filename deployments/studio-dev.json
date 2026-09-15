@@ -40,7 +40,7 @@
   },
   "verification": {
     "method": "live view reads via genlayer-js / genlayer-py at the current head",
-    "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address. The source hash above is the repository revision this record was written against. That the roster index is genuinely part of the deployed revision is established behaviourally: get_enclave_count answers on this address (a method that did not exist on the predecessor), and get_enclave_by_index(0) reverts out-of-range on the empty roster exactly as the guard specifies.",
+    "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address. The source hash above is the repository revision this record was written against. That the roster index is genuinely part of the deployed revision is established behaviourally: get_enclave_count answers on this address (a method that did not exist on the predecessor), and get_enclave_by_index(0) reverted out-of-range while the roster was still empty at deploy time, exactly as the guard specifies.",
     "observed_at_deploy": {
       "get_protocol_overview": {
         "balance": "0",
@@ -55,9 +55,93 @@
       "get_enclave_by_index(0)": "reverts ERR_INVALID_STATE (index out of range) -- correct for an empty roster",
       "required_dispute_bond_for_fresh_address": "500000000000000000000",
       "claimable_of_for_fresh_address": "0"
+    },
+    "observed_at_current_head": {
+      "note": "Read from the chain after agent.demo and agent.seed were run against this address. Enclave order is the contract's own roster index, not a guess.",
+      "get_protocol_overview": {
+        "balance": "6700000000000000000000",
+        "total_collateral": "900000000000000000000",
+        "locked_escrow": "4300000000000000000000",
+        "reserves": "0",
+        "total_claimable": "1500000000000000000000",
+        "next_treaty_id": "10",
+        "solvent": true
+      },
+      "get_enclave_count": "6",
+      "roster": [
+        {
+          "index": 0,
+          "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
+          "name": "Halcyon",
+          "archetype": "Autonomous Arbiter",
+          "status": "ACTIVE",
+          "reputation": "65",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 1,
+          "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+          "name": "Meridian",
+          "archetype": "Oracle Collective",
+          "status": "SANCTIONED",
+          "reputation": "0",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 2,
+          "address": "0xeC250E9D8F6E8c6788Cc3622E7324F52fc66a4e7",
+          "name": "Vantage",
+          "archetype": "Liquidity Nexus",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 3,
+          "address": "0x958640fbcb8991298757CC14562681EaC1E5c48F",
+          "name": "Aegis",
+          "archetype": "Defense Vanguard",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 4,
+          "address": "0x144a4588104B8EE058d1F7C49623A60E907c18d6",
+          "name": "Quorum",
+          "archetype": "Oracle Collective",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 5,
+          "address": "0xE121091ABd59D2f686147F0C6135ab9936863730",
+          "name": "Solstice",
+          "archetype": "Autonomous Arbiter",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        }
+      ],
+      "treaties": [
+        { "id": 1, "kind": "DATA_SHARING", "status": "PROPOSED", "parties": ["Halcyon", "Meridian"], "bond_a": "700000000000000000000", "bond_b": "0" },
+        { "id": 2, "kind": "DATA_SHARING", "status": "SETTLED", "parties": ["Halcyon", "Meridian"], "bond_a": "0", "bond_b": "0", "verdict": "CRITICAL_BREACH" },
+        { "id": 3, "kind": "TRADE_CORRIDOR", "status": "ACTIVE", "parties": ["Halcyon", "Vantage"], "bond_a": "300000000000000000000", "bond_b": "300000000000000000000" },
+        { "id": 4, "kind": "NON_AGGRESSION", "status": "ACTIVE", "parties": ["Halcyon", "Aegis"], "bond_a": "300000000000000000000", "bond_b": "300000000000000000000" },
+        { "id": 5, "kind": "DATA_SHARING", "status": "ACTIVE", "parties": ["Halcyon", "Quorum"], "bond_a": "300000000000000000000", "bond_b": "300000000000000000000" },
+        { "id": 6, "kind": "NON_AGGRESSION", "status": "ACTIVE", "parties": ["Halcyon", "Solstice"], "bond_a": "300000000000000000000", "bond_b": "300000000000000000000" },
+        { "id": 7, "kind": "DATA_SHARING", "status": "ACTIVE", "parties": ["Vantage", "Quorum"], "bond_a": "200000000000000000000", "bond_b": "200000000000000000000" },
+        { "id": 8, "kind": "NON_AGGRESSION", "status": "ACTIVE", "parties": ["Aegis", "Solstice"], "bond_a": "200000000000000000000", "bond_b": "200000000000000000000" },
+        { "id": 9, "kind": "DATA_SHARING", "status": "ACTIVE", "parties": ["Quorum", "Aegis"], "bond_a": "200000000000000000000", "bond_b": "200000000000000000000" }
+      ],
+      "treaty_counts": { "total": 9, "active": 7, "proposed": 1, "settled": 1 },
+      "claimable_of": { "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e": "1500000000000000000000" },
+      "reputation_transition": "Halcyon 50 -> 65 (vindicated, REP_REWARD_CRITICAL); Meridian 50 -> 0 and SANCTIONED",
+      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (900 + 4300 + 0 + 1500 == 6700 GEN)"
     }
   },
-  "state_note": "This address is freshly deployed and EMPTY: no enclaves, no treaties, next_treaty_id 1. The board therefore reads ON-CHAIN / EMPTY until the protocol is populated. To reproduce the demo state, run the autonomous duet and then the wider roster against this address (agent/chain.py already points here): `.venv/bin/python -m agent.demo` (found -> propose -> reject -> adapt -> ratify -> dispute -> verdict), then `.venv/bin/python -m agent.seed` (founds Vantage, Aegis, Quorum, Solstice and wires the star + mesh). With the V3.1 roster index the frontend now lists every founded enclave directly via get_enclave_count + get_enclave_by_index, so agents are visible even before they join a treaty. Both studio-next.genlayer.com and studio-dev.genlayer.com serve chain 61997 and answer identically; the repository standardises on studio-next, matching the hackathon brief.",
+  "state_note": "Populated. This address holds the full protocol state the repository demonstrates: six sovereignties and nine treaties, reached by running the autonomous duet and then the wider roster against it (`.venv/bin/python -m agent.demo`, then `.venv/bin/python -m agent.seed`; agent/chain.py points here). The board therefore reads ON-CHAIN with six islands. Because V3.1 exposes the roster index, the frontend lists every founded enclave directly through get_enclave_count + get_enclave_by_index instead of deriving the set from treaty parties -- Meridian, which is SANCTIONED and party only to a settled treaty and a still-standing proposal, is drawn for that reason. Every figure below was read from the chain after that run rather than carried over from a predecessor: the two deployments reached the same numbers from the same starting state because the same source driven by the same state-driven scripts converges on the same outcome. Both studio-next.genlayer.com and studio-dev.genlayer.com serve chain 61997 and answer identically; the repository standardises on studio-next, matching the hackathon brief.",
   "predecessors": [
     {
       "contract_address": "0xB78A41624fe09163fee3159091E907B7b7Af9D00",

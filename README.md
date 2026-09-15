@@ -785,25 +785,27 @@ the board reads the deployed contract directly. Confirm it yourself:
 - **TOTAL VALUE LOCKED** and the solvency badge are read live from
   `get_protocol_overview` and reconcile against the explorer.
 
-That address is a **fresh deployment, and it is empty**. Nothing has been
-founded on it yet, so the board reads `ON-CHAIN / EMPTY`, the archipelago holds
-zero islands, and `get_enclave_count` answers `0`. That is the honest reading of
-a new deployment rather than a fault -- and the `0` is itself evidence, because
-a contract without the roster index would not answer the call at all.
+That address is **populated**, and the board reads it live: the command bar
+badges `ON-CHAIN`, the archipelago holds **six islands**, and **TOTAL VALUE
+LOCKED** reads **4300 GEN (chain)**, straight from the contract's `locked_escrow`.
+Every figure on the board reconciles against `get_protocol_overview` and the
+explorer.
 
-To fill it, run the two agent tutorials below (about twenty minutes together):
+Six sovereignties and nine treaties is the state `agent/demo` followed by
+`agent/seed` produces, and those two scripts are what put it there --
+`agent/chain.py` points at this address. Against a **fresh** deployment the same
+pair reaches the same place from nothing, which is what to expect if you deploy
+your own: a new contract answers `get_enclave_count` with `0`, the board reads
+`ON-CHAIN / EMPTY`, and the archipelago stays empty until the agents run.
 
 ```bash
 .venv/bin/python -m agent.demo       # Halcyon and Meridian, through to a verdict
 .venv/bin/python -m agent.seed       # Vantage, Aegis, Quorum, Solstice + treaties
 ```
 
-A completed run leaves the board reading `ON-CHAIN` with **six islands** and
-**TOTAL VALUE LOCKED** of **4300 GEN (chain)**, read straight from the
-contract's `locked_escrow`. Those are the figures the superseded deployment
-reached from this same starting state -- `agent/chain.py` already points at the
-address above, so the same two scripts drive it -- and every one of them is then
-verifiable against `get_protocol_overview` and the explorer.
+A completed run leaves six islands and nine treaties, seven of them ACTIVE, with
+4300 GEN of escrow. The full observed state, read from the chain after the run,
+is in [`deployments/studio-dev.json`](deployments/studio-dev.json).
 
 Reads need no wallet. **Writes do**: clicking a propose/ratify/dispute action
 without a wallet produces a receipt labelled *simulated* and the command bar
@@ -1203,32 +1205,58 @@ authoritative record; it is updated by reading the chain, never by hand.
 
 ### Live state at the current head
 
-The address is a fresh deployment and is **empty**. Read from the contract:
+Read from the contract, after `agent.demo` and `agent.seed` were run against it.
+Six sovereignties, nine treaties, seven of them ACTIVE:
 
 | Counter | Value |
 |---|---|
-| `balance` | 0 GEN |
-| `total_collateral` | 0 GEN |
-| `locked_escrow` | 0 GEN |
+| `balance` | 6700 GEN |
+| `total_collateral` | 900 GEN |
+| `locked_escrow` | 4300 GEN |
 | `reserves` | 0 GEN |
-| `total_claimable` | 0 GEN |
-| `next_treaty_id` | 1 |
-| `get_enclave_count` | 0 |
+| `total_claimable` | 1500 GEN |
+| `next_treaty_id` | 10 |
+| `get_enclave_count` | 6 |
 | `solvent` | `true` |
 
-`get_enclave_count` answering `0` is also evidence about *which* revision is
-deployed: a contract without the roster index has no such method, and the call
-reverts instead. See the deployment record's `verification` block.
+That satisfies the solvency identity: `900 + 4300 + 0 + 1500 == 6700` GEN.
 
-The populated end state -- what `agent/demo.py` followed by `agent/seed.py`
-produces -- is held by the superseded revision and recorded in
+The roster, in the order the contract enumerates it:
+
+| # | Enclave | Archetype | Status | Reputation | Collateral |
+|---|---|---|---|---|---|
+| 0 | Halcyon | Autonomous Arbiter | ACTIVE | 65 | 150 GEN |
+| 1 | Meridian | Oracle Collective | SANCTIONED | 0 | 150 GEN |
+| 2 | Vantage | Liquidity Nexus | ACTIVE | 50 | 150 GEN |
+| 3 | Aegis | Defense Vanguard | ACTIVE | 50 | 150 GEN |
+| 4 | Quorum | Oracle Collective | ACTIVE | 50 | 150 GEN |
+| 5 | Solstice | Autonomous Arbiter | ACTIVE | 50 | 150 GEN |
+
+Treaty #2 is the one that was adjudicated: Halcyon filed against Meridian, the
+validators read the treaty's own oracles inside consensus, agreed on
+`CRITICAL_BREACH`, and settlement released both bonds -- which is why Halcyon
+holds 1500 GEN claimable and Meridian's reputation reads 0 and `SANCTIONED`.
+Treaty #1 is Halcyon's rejected opening offer, still standing with its 700 GEN
+bond; it is the case `cancel_proposal` exists for, and it is 700 of the 4300 GEN
+of escrow.
+
+Every one of the six is party to at least one treaty, so this state does not by
+itself exercise the index's headline case -- an enclave that has never been party
+to one. What it does show is the index answering and enumerating the roster in a
+fixed order, which is what the board draws its islands from; treaty parties are
+merged in afterwards only as a fallback.
+
+This address was deployed **empty** and populated by running those two scripts
+against it. The deploy-time reading is in
 [`deployments/studio-dev.json`](deployments/studio-dev.json) under
-`predecessors`, with each reading kept beside the address it came from. Read
-live, that address holds `total_collateral` 900 GEN, `locked_escrow` 4300 GEN,
-`total_claimable` 1500 GEN and `next_treaty_id` 10 over six sovereignties and
-nine treaties, with the solvency identity satisfied
-(`900 + 4300 + 0 + 1500 == 6700` GEN). It was superseded because it predates the
-roster index, not because anything in it failed.
+`verification.observed_at_deploy`, and the head reading above under
+`observed_at_current_head`. The figures match what the superseded deployment
+reached from the same starting state -- six sovereignties, nine treaties,
+`900 + 4300 + 0 + 1500 == 6700` -- which is the expected result rather than a
+coincidence: the same source driven by the same state-driven scripts converges
+on the same protocol outcome. That predecessor is carried under `predecessors`,
+and it was superseded because it predates the roster index, not because anything
+in it failed.
 
 ## B. Verification log
 
@@ -1242,7 +1270,7 @@ roster index, not because anything in it failed.
 | Lint | `cd frontend && npx eslint . --max-warnings=0` | Exit 0, no warnings. |
 | Production build | `cd frontend && npm run build` | 0 TypeScript, lint, and SSR/Canvas errors. |
 | ABI fidelity | `DIPLOMATIC_ABI` entries vs `contracts/westphalia.py` public methods | 22 == 22, name-for-name identical (11 view / 4 payable / 7 nonpayable). |
-| Deployment binding | Live `get_enclave_count` on the recorded address | Answers `0`. The call reverts on the superseded revision, so the roster index is genuinely deployed rather than merely present in the repository. |
+| Deployment binding | Live `get_enclave_count` on the recorded address | Answers `6`, and `get_enclave_by_index` resolves all six slots. The call reverts on the superseded revision, so the roster index is genuinely deployed rather than merely present in the repository. |
 | Write path | `found_sovereignty` on chain 61997 | Receipt `FINISHED_WITH_RETURN`; collateral moved; `get_enclave` returns the record. |
 | End-to-end | `.venv/bin/python -m agent.demo` | Full lifecycle to a `CRITICAL_BREACH` verdict; escrow settled; reputation rewritten. |
 | ASCII purity | every tracked file | All UI labels, code, variables, and comments are pure ASCII English. |
