@@ -1,19 +1,24 @@
 import type { NetworkConfig } from "./types";
 
-// GenLayer Studio Net targets. Primary is studio-dev, with studio as fallback.
+// GenLayer Studio Net targets.
 //
-// `studio-next.genlayer.com` and `studio-dev.genlayer.com` both serve chain
-// 61997 and answer identically (verified: same eth_chainId 0xf22d, same
-// contract state). The hackathon brief names studio-next, while genlayer-js's
-// own bundled `studioDevnet` chain definition names studio-dev -- so neither is
-// wrong, and NEXT_PUBLIC_GENLAYER_RPC_URL overrides the choice per deployment.
+// Chain 61997 is served by two RPC hostnames that answer identically (verified:
+// same eth_chainId 0xf22d, same contract state): `studio-next.genlayer.com`,
+// which the hackathon brief names, and `studio-dev.genlayer.com`, which
+// genlayer-js's own bundled `studioDevnet` chain definition names. The RPC
+// default is the brief's, overridable per deployment via
+// NEXT_PUBLIC_GENLAYER_RPC_URL.
+//
+// The explorer is *not* symmetric with the RPC: the brief names
+// `explorer-studio-dev.genlayer.com` explicitly, so that is what is linked even
+// though the RPC beside it points at studio-next.
 export const STUDIO_DEV: NetworkConfig = {
   key: "studio-dev",
   label: "GenLayer Studio Net",
   chainId: 61997,
   rpcUrl:
     process.env.NEXT_PUBLIC_GENLAYER_RPC_URL ?? "https://studio-next.genlayer.com/api",
-  explorerUrl: "https://explorer-studio-next.genlayer.com",
+  explorerUrl: "https://explorer-studio-dev.genlayer.com",
 };
 
 export const STUDIO: NetworkConfig = {
@@ -21,7 +26,7 @@ export const STUDIO: NetworkConfig = {
   label: "GenLayer Studio",
   chainId: 61999,
   rpcUrl: "https://studio.genlayer.com/api",
-  explorerUrl: "https://explorer-studio-next.genlayer.com",
+  explorerUrl: "https://explorer-studio-dev.genlayer.com",
 };
 
 export const NETWORKS: NetworkConfig[] = [STUDIO_DEV, STUDIO];

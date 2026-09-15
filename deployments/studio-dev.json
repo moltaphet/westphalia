@@ -3,7 +3,7 @@
   "chain_id": 61997,
   "rpc_url": "https://studio-next.genlayer.com/api",
   "contract_address": "0xB78A41624fe09163fee3159091E907B7b7Af9D00",
-  "explorer_url": "https://explorer-studio-next.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00",
+  "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00",
   "source": "contracts/westphalia.py",
   "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
   "source_sha256_at_record": "aa87a828a401eef55a72058eb6bcc95ee3e869b7c940b10bef23e8c71050845a",
@@ -94,7 +94,7 @@
     },
     "predecessor": {
       "contract_address": "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
-      "explorer_url": "https://explorer-studio-next.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+      "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
       "status": "retired from the repository, still live and readable on chain",
       "observed_at_retirement": {
         "get_protocol_overview": {

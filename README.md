@@ -6,12 +6,12 @@ by a GenLayer validator quorum -- rendered as an interactive 3D voxel war room.
 
 | | |
 |---|---|
-| **Live contract** | [`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-next.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00) |
+| **Live contract** | [`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-dev.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00) |
 | **Network** | GenLayer Studio Net, chain 61997 |
-| **Explorer** | https://explorer-studio-next.genlayer.com |
+| **Explorer** | https://explorer-studio-dev.genlayer.com |
 | **Contract source** | [`contracts/westphalia.py`](contracts/westphalia.py) |
 | **Runner** | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
-| **Tests** | 56 passing (33 contract + 23 agent) |
+| **Tests** | 56 passing (33 contract + 23 agent); 5 integration tests need a live network |
 | **Demo video** | _TODO: link before final submission_ |
 | **Reviewer quickstart** | [Quickstart for reviewers](#quickstart-for-reviewers) |
 
@@ -282,7 +282,9 @@ zero penalty.
 ### 5.1 Storage
 
 `contracts/westphalia.py` declares twelve storage slots on `Westphalia`, plus
-two `@allow_storage` dataclasses (`Enclave`, `Treaty`).
+two storage-enabled dataclasses (`Enclave`, `Treaty`) -- decorated
+`@gl.storage.allow` here, which is the spelling this contract's pinned runner
+exposes; see the note in section 5 on why that is not `@allow_storage`.
 
 | Slot | Type | Purpose |
 |---|---|---|
@@ -405,7 +407,9 @@ collateral-exit gate.
 
 Next.js 14 (App Router), React 18, TypeScript, Tailwind, `@react-three/fiber`
 with `@react-three/drei` and `@react-three/postprocessing`, and `genlayer-js`
-2.0.0-rc.1 for chain access. No external 3D assets: every terrain mesh, citadel,
+2.0.0-rc.1 for chain access. Writes go through the **GenLayer Transaction Kit**
+(`@genlayer/transaction-kit` + `@genlayer/transaction-kit-react`, both pinned to
+`0.1.0-rc.2`) -- see 6.4. No external 3D assets: every terrain mesh, citadel,
 and structure is generated procedurally from Three.js primitives and
 `InstancedMesh`.
 
@@ -472,14 +476,63 @@ Writes need three things, and each one is a failure mode that was hit and fixed:
 2. **The SDK's own chain object.** See 6.3. Without it a write dies inside viem
    (`"Cannot convert undefined to a BigInt"`).
 3. **An explicit fee.** Studio Net has no fee-manager contract, so the fee comes
-   from the chain's live fee policy -- but only if the SDK is asked, via
-   `estimateTransactionFees()`. Omitting it leaves `feeValue` at `0n` and the
-   consensus contract rejects the transaction with `FeeValueMustBeNonZero(1)`.
+   from the chain's live fee policy. Omitting it leaves `feeValue` at `0n` and
+   the consensus contract rejects the transaction with
+   `FeeValueMustBeNonZero(1)`.
 
-`DiplomaticContract.write()` performs all three and routes through
-`writeContract`. When no wallet is present, calls resolve to a deterministic
-**simulated** receipt so the UI stays fully explorable -- and the receipt and
-the command bar both say `simulated`, rather than silently faking success.
+The third one is no longer this repository's problem to solve by hand. All three
+are the **Transaction Kit**'s job, and the app hands it every live write.
+
+**Every write goes through an approval gate.** `lib/store.ts` holds one piece of
+state -- `txRequest` -- and `DiplomaticContract` holds one dependency -- a
+`WriteAuthorizer`. A write callback calls the contract exactly as it always did;
+the contract turns the call into a `WritePlan` (`{ method, summary, value, args,
+tx }`) and awaits the authorizer instead of dispatching. The store parks that
+plan in `txRequest`, which puts `components/TransactionGate.tsx` on screen, and
+resolves the promise when the panel reports a decided transaction -- or rejects
+it with `WriteCancelled` when the user closes the gate.
+
+Writes are triggered from all over the board (the HUD, the treasury view, the
+found-realm modal), so the gate is driven by store state rather than owned by any
+one component. That is what makes every path share one fee quote and one
+signature. `runPipeline` treats `WriteCancelled` as an intentional abort: it
+clears the pipeline silently and stops the callback where it stands, so nothing
+downstream records state for a write that never happened.
+
+**The panel is the kit's, not ours.** `TransactionGate` renders
+`GenLayerTransactionPanel` rather than a hand-built form, so the reviewer sees
+what the kit actually produces: the deposit split across time units, execution
+budget and message fees; the network's current price caps; the pending-queue
+depth for the account; and a verification badge reporting whether the quoted fee
+policy still matches the chain's. The panel owns estimate -> review -> sign ->
+track, and the gate only supplies the transaction, waits for the outcome, and
+offers a way out. Its stylesheet is themed onto the HUD palette by redefining the
+kit's `--gltk-*` tokens in `app/globals.css` -- tokens only, no structural
+selectors, so a kit upgrade that adds surface keeps working.
+
+Three implementation notes worth keeping:
+
+- **The core kit is loaded lazily.** `@genlayer/transaction-kit`'s bundle imports
+  `ethers` and `genlayer-js` at module scope, and the app is server-rendered.
+  `lib/kit.ts` therefore reaches it through a dynamic `import()` inside an
+  effect -- the same discipline `lib/contract.ts` applies to `genlayer-js`. The
+  React adapter imports only `react`, so components import it directly.
+- **Value travels apart from the call.** The kit takes the caller's value at
+  *estimate* time (`PolicyInput.userValue`, from which it derives the deposit);
+  `SubmitInput` carries only the call. `WritePlan` keeps that asymmetry in one
+  place instead of at ten call sites.
+- **No developer fee profile is shipped.** The kit accepts a `suggestions`
+  profile of allocations measured offline, and ignores any profile whose
+  `chainId` does not match. This deployment has no such measurement -- the
+  integration suite that would produce one cannot run without a GenLayer
+  simulator -- so the quote comes from `source: 'network-default'`, built from
+  live prices and caps. A profile is the right thing to add once those numbers
+  are measured, and not before.
+
+**Reviewer mode is unchanged.** With no wallet there is no signer, so
+`DiplomaticContract.write()` resolves to a deterministic **simulated** receipt
+and the UI stays fully explorable. The receipt and the command bar both say
+`simulated`, rather than silently faking success.
 
 ### 6.5 Views
 
@@ -546,12 +599,16 @@ agents.
 contracts/
   westphalia.py           The protocol. 19 public methods.
 
-tests/direct/             In-memory contract suite (33 tests, ~45s).
-  conftest.py             GenVM v0.3 harness wiring.
-  test_westphalia.py      9 baseline adversarial cases.
-  test_westphalia_v2.py   6 V2 protocol cases.
-  test_adversarial_exploits.py  13 red-team regressions incl. forged-oracle PoC.
-  test_poc_regressions.py 5 post-audit P1-P4 PoC regressions.
+tests/
+  direct/                 In-memory contract suite (33 tests, ~45s). No network.
+    conftest.py           GenVM v0.3 harness wiring.
+    test_westphalia.py    9 baseline adversarial cases.
+    test_westphalia_v2.py 6 V2 protocol cases.
+    test_adversarial_exploits.py  13 red-team regressions incl. forged-oracle PoC.
+    test_poc_regressions.py 5 post-audit P1-P4 PoC regressions.
+  integration/            Full-consensus suite (5 tests). Needs a live network.
+    test_westphalia.py    Deploy, found, propose, ratify, dispute, settle.
+    fixtures.py           Expected state, kept beside the assertions that read it.
 
 agent/                    Two-agent autonomous duet (23 tests).
   agent.py                Decision loop; founds, negotiates, litigates.
@@ -573,6 +630,8 @@ frontend/
     ProceduralIsland.tsx  Per-enclave voxel island.
     RealmDirectory.tsx    Collapsible camera quick-jump drawer.
     FoundRealmModal.tsx   Found Sovereignty deployment modal.
+    TransactionGate.tsx   The signature gate: mounts the kit's approval panel
+                          over the board for every live write.
     GlobalFeedback.tsx    Transaction pipeline overlay + toasts.
     IntroOverlay.tsx      Entry overlay.
     scene/                Citadel, TreatyArc, TreatyLinks, TreatyMotes,
@@ -583,19 +642,43 @@ frontend/
     types.ts              Domain model.
     store.ts              State hub: enclaves, actions, found-realm, hydration.
     networks.ts           Chain configuration + SDK chain resolution.
-    contract.ts           ABI + Web3 binding (read and write paths).
+    kit.ts                Lazy Transaction Kit binding for the injected wallet.
+    contract.ts           ABI, view binding, and the write-plan authorizer seam.
     chainState.ts         Chain snapshot -> domain model (pure).
     archetypes.ts         Archetype presets + deterministic terrain seeds.
     world.ts, noise.ts    Orbital layout and procedural terrain.
     board.ts              Shared render constants and color maps.
     mockData.ts           Reviewer-mode seed data, used only when unreachable.
 
+deploy/
+  deployScript.ts         `genlayer deploy` entry point. Reads the contract,
+                          waits for a decided receipt, prints the address.
+
+scripts/
+  check_abi.py            Reflects the contract's ABI and diffs it against the
+                          frontend's hand-written one. Exits 1 on drift.
+
 deployments/
   studio-dev.json         Deployment record: address, runner, source hash,
                           observed state at deploy and at the current head.
 
+.github/workflows/
+  contracts.yml           Validate + typecheck the contract, diff its ABI, run
+                          the two offline suites.
+  frontend.yml            Lint and build the frontend.
+
+gltest.config.yaml        Network config for the gltest runner.
+pyproject.toml            pytest configuration: testpaths and markers.
 requirements.txt          Pinned Python toolchain (Python 3.12 + pre-releases).
 ```
+
+The two test runners are deliberate. **Bare `pytest`** runs the offline suites --
+`pyproject.toml` points `testpaths` at `tests/direct` and `agent`, never at
+`tests/`, so a plain run can never dial a network. **`gltest`** runs the
+integration suite, which needs a funded account and a live chain; it is not a
+merge gate and `.github/workflows/contracts.yml` says so. `gltest.config.yaml`
+defaults to `localnet` because the simulator needs no funding, and pins
+`studio_devnet` at the RPC this project deploys to.
 
 ---
 
@@ -662,6 +745,14 @@ without a wallet produces a receipt labelled *simulated* and the command bar
 stays on `REVIEWER`. To dispatch a real transaction, connect an injected wallet
 holding GEN on chain 61997.
 
+With a wallet connected, the same click opens the **Transaction Kit approval
+gate** over the board: the call's fee quote (deposit split across time units,
+execution budget and message fees), the network's current price caps, the
+pending-queue depth for your account, and a badge reporting whether the quoted
+fee policy still matches the chain's. Nothing is dispatched until you sign. On
+the recorded deployment the quote reads `source: network-default` and
+`verification: verified`, which is what a healthy Studio Net quote looks like.
+
 ### Run the contract test suite (about three minutes)
 
 ```bash
@@ -690,7 +781,7 @@ the dispute.
 ### Verify the deployment on the explorer
 
 Contract:
-[`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-next.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00)
+[`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-dev.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00)
 on GenLayer Studio Net (chain 61997).
 
 GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live
@@ -756,6 +847,11 @@ wallet: it is chmod 0600 for a reason.
 
 ## 5. Running the test suites
 
+Two runners, for two kinds of test.
+
+**Bare `pytest` runs the offline suites** -- 56 tests, no network, no keys, no
+funded account:
+
 ```bash
 # Both suites: 56 tests.
 .venv/bin/python -m pytest -q
@@ -767,19 +863,160 @@ wallet: it is chmod 0600 for a reason.
 .venv/bin/python -m pytest agent/ -q
 ```
 
+`pyproject.toml` pins `testpaths = ["tests/direct", "agent"]`, so a bare run
+cannot reach `tests/integration/` by accident.
+
+**`gltest` runs the integration suite** -- 5 tests that drive the contract
+through real GenLayer consensus, deploying it, founding two enclaves, proposing
+and ratifying a treaty, and then settling a dispute. These need a live network
+and a funded account:
+
+```bash
+genlayer up                                     # local simulator (needs Docker)
+.venv/bin/gltest tests/integration -v -s
+
+.venv/bin/gltest tests/integration -v -s --network studio_devnet
+```
+
+**The localnet must be the v0.123.0 line, or the contract cannot be deployed to
+it at all.** `genlayer up` starts `simulator-jsonrpc:latest`, and that image
+ships only the older GenVM runner generation: executor v0.2.16, whose
+`py-genlayer` runner is `1jb45aa8y...`. This contract's header pins
+`py-genlayer:5jycge4q8k...`, which belongs to executor v0.3.0-rc7. A default
+localnet therefore has no runner to run the contract with, and its one std build
+(`11rhn002y...`) spells the storage decorator `allow_storage` rather than the
+`allow` this contract uses -- so it would fail to import even if it had one.
+Nothing is fetched to fill the gap either: the bucket `manifest.yaml` points at
+carries only the older generation, and answers 404 for both hashes this contract
+resolves to. `v0.123.0-rc.6` is the only published tag whose image contains
+`5jycge4q8k...` and its std. Pin it in the CLI's own `.env`, which is where
+`genlayer init` writes it:
+
+```bash
+cd "$(npm root -g)/genlayer"
+LOCALNETVERSION="v0.123.0-rc.6" >> .env
+genlayer up --headless
+```
+
+Two things about that startup are worth knowing before you run it. The first
+`docker compose up` on a new image AOT-compiles every runner GenVM ships into
+`/genvm-cache`; measured on an Apple Silicon laptop that is roughly twelve
+minutes, and `genlayer up` waits only four before declaring the simulator
+uninitialized. Mount `/genvm-cache` as a named volume once and the cost is paid
+per image tag rather than per container, which brings every later start back
+inside the CLI's window. And `genlayer up` passes `--profile frontend` unless
+you pass `--headless`, which pulls a second multi-gigabyte image for a UI these
+tests never open.
+
+`simulator-hardhat` is the one service that has no v0.123.0 tag; it is pinned to
+`latest` in the compose file so that a pinned `LOCALNETVERSION` does not make
+compose fail the whole project with `manifest unknown`.
+
+The adjudication round is driven with mock validators -- the treaty's two
+telemetry oracles are answered from a fixed body and the LLM verdict is pinned,
+which is the only way to make a consensus round reproducible. The mocks are
+supplied to the *validators*, not to the contract, so the leader and every
+validator still run the real fetch-and-compare path. That is the part only a
+live network can answer: everything `tests/direct/` proves about business logic
+is assumed rather than re-proved here.
+
 Static analysis of the contract:
 
 ```bash
-genvm-lint check contracts/westphalia.py
+.venv/bin/genvm-lint validate contracts/westphalia.py    # imports it under the pinned SDK
+.venv/bin/genvm-lint typecheck contracts/westphalia.py   # Pyright against that SDK
+.venv/bin/python scripts/check_abi.py                    # frontend ABI vs the contract's
 ```
 
-Expected: `Lint passed (3 checks)`, `Validation passed`, 19 methods (9 view,
-10 write) against the pinned runner.
+`genvm-linter` is pinned in `requirements.txt`, so these work after the install
+steps above. `Validation passed`, the method census (19 methods: 9 view, 10
+write), `No type errors found`, and the ABI comparison are all stable.
+
+`genvm-lint check` -- the command the linter's own README leads with -- is
+**not** used here, because it exits 1 on this contract for a reason that is not
+a defect. The note below is the whole story.
 
 The agent suite's fixtures are built from two *real observed payloads* -- an
 agreed return and the `ERR_INSUFFICIENT_BOND` revert a stale dispute bond
 produces -- so receipt parsing is tested against the wire, not against a
 hand-written idealization.
+
+#### Note on the storage-decorator spelling
+
+`genvm-lint lint` reports two `E014` errors on this contract, which is why
+`genvm-lint check` exits 1:
+
+```
+line 461: Class 'Enclave' used in storage needs @allow_storage decorator
+line 474: Class 'Treaty' used in storage needs @allow_storage decorator
+```
+
+**Both are false positives, and the contract's spelling is the correct one.**
+The rule -- `StorageClassChecker` in `genvm_linter/lint/structure.py` -- renders
+each decorator to its dotted name and compares it against a hardcoded list:
+
+```python
+if dec_name in ("allow_storage", "gl.allow_storage"):
+```
+
+The rendering is not the problem: `_decorator_to_string` walks the attribute
+chain, so this contract's `@gl.storage.allow` stringifies faithfully to
+`"gl.storage.allow"`. It simply is not one of the two names listed, so the
+check never records the decorator as seen and reports both dataclasses as
+missing it. They are not missing it.
+
+The list is not arbitrary, it is **stale** -- written against an earlier
+generation of the SDK. The Python std library changed shape, and with it the
+spelling:
+
+| bundle | `py-lib-genlayer-std` shipped | decorator |
+|---|---|---|
+| `genvm-universal-v0.3.0-rc7` | many, incl. `11rhn002...` | `gl.allow_storage` |
+| `genvm-manager-v0.6.0-rc5` (current) | exactly one: `kzr02ndm9...` | `gl.storage.allow` |
+
+These are two generations, not two variants. `11rhn002...` carries a
+`_genlayer_runner.py` and ends with `from .py.storage import *`, which is what
+puts `allow_storage` at the top level. `kzr02ndm9...` carries a
+`_genlayer_bootloader.py` and pre-loads `genlayer.storage` to break a circular
+import, which is what puts it *under* `storage`. The `E014` list names the older
+generation's symbol, and this contract is on the newer one.
+
+Which build a contract gets is not a choice either: the loader reads the
+manifest of the `py-genlayer` runner named in the header and pulls whichever
+`py-lib-genlayer-std` that manifest names. This contract pins
+`py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng`, the current
+manager bundle ships that runner plus one std build, and the runner's manifest
+names that build:
+
+```json
+{"Depends": "py-lib-genlayer-std:kzr02ndm9et4qkmbqpq5djjt5sme2yt76n7sz1qbzax0knt6mam0"}
+```
+
+So `@gl.storage.allow` is not a preference; against this runner it is the only
+spelling that exists. Rewriting both decorators to `@gl.allow_storage` makes all
+33 contract tests fail with an import error -- measured, not assumed -- because
+the SDK the runner loads has no such symbol.
+
+There is no newer linter to wait for, either: `0.11.1rc2` -- what
+`requirements.txt` pins -- is *ahead* of PyPI's latest stable, `0.11.0`, and the
+`v0.11.1-rc.2` release commit still carries the two-name list. So the choice is
+to run `lint` and accept two permanent false errors, or to gate on the layers
+that are actually load-bearing. This repository does the second:
+
+- `genvm-lint validate` imports the contract under the exact SDK its runner
+  pins -- the ground truth `E014` only approximates from the AST. If either
+  decorator named a symbol that did not exist, this import would fail. It
+  passes.
+- `genvm-lint typecheck` runs Pyright against that same SDK. It passes.
+- `scripts/check_abi.py` reflects the contract's real ABI and compares it,
+  method by method, against the hand-written `DIPLOMATIC_ABI` the frontend
+  calls with.
+
+None of the three can pass vacuously: each fails loudly if the contract stops
+importing, if a type regresses, or if the two ABIs drift apart. The ABI check
+was negative-tested by renaming one method in `frontend/lib/contract.ts`, which
+made it report that method as missing and a second as unknown, and exit 1.
+
 
 ## 6. Configuration reference
 
@@ -799,9 +1036,36 @@ and answer identically; either works, and the default is `studio-next`.
 | Studio Net (dev) | 61997 | `https://studio-next.genlayer.com/api` |
 | Studio (fallback) | 61999 | `https://studio.genlayer.com/api` |
 
-Explorer: https://explorer-studio-next.genlayer.com
+Explorer: https://explorer-studio-dev.genlayer.com
+
+`gltest.config.yaml` is the Python side of the same configuration: it names the
+networks the contract suites run against, and the `contracts` path the runner
+loads the contract from. It holds no secrets, and any `${VAR}` written there
+would be resolved with `override=True` -- so a variable that is unset at run time
+aborts the whole pytest session rather than being ignored. Keep it literal.
+
+| Key | Value | Why |
+|---|---|---|
+| `networks.default` | `localnet` | The simulator needs no funding, so the default run costs nothing. |
+| `networks.localnet.url` | `http://127.0.0.1:4000/api` | Where `genlayer up` serves the simulator. |
+| `networks.studio_devnet.url` | `https://studio-next.genlayer.com/api` | Chain 61997, pinned at the RPC this project deploys to. |
+
+Reach the second one with `gltest tests/integration --network studio_devnet`.
 
 ## 7. Deploying your own instance
+
+`deploy/deployScript.ts` is the scripted form of this. With `genlayer network`
+pointed at the target chain:
+
+```bash
+genlayer deploy
+```
+
+The CLI runs `deployScript.ts` with a client already bound to the selected
+network, so the script never builds a chain object and never holds a key. It
+reads `contracts/westphalia.py`, waits for the transaction to be *decided* (a
+deploy that reverts in `__init__` still decides), and prints the contract
+address plus the three places that address has to go. By hand, those are:
 
 1. Deploy `contracts/westphalia.py` to GenLayer Studio Net. The runner pin is
    the first line of the file; keep it.
@@ -812,6 +1076,10 @@ Explorer: https://explorer-studio-next.genlayer.com
 4. Record the deployment in `deployments/studio-dev.json`, including
    `source_sha256_at_record` so the deployed source is identifiable later.
 
+Before deploying, run the integration suite against the contract (section 5).
+It is the only suite that exercises consensus, and it is the one that cannot run
+in CI.
+
 The ABI in `frontend/lib/contract.ts` mirrors the deployed contract's
 view/payable/nonpayable methods exactly. If you change the contract's public
 surface, update the ABI in the same commit -- a stale ABI is a silent failure,
@@ -821,9 +1089,11 @@ not a loud one.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `FeeValueMustBeNonZero(1)` | The write omitted `fees`. Studio Net has no fee manager, so the fee must come from `estimateTransactionFees()`. | Pass `fees` on every write. `DiplomaticContract.write()` already does. |
+| `FeeValueMustBeNonZero(1)` | A write was dispatched with no fee. Studio Net has no fee manager, so the deposit has to be derived from the chain's live fee policy. | Route the write through the Transaction Kit -- `DiplomaticContract.write()` does, via the authorizer. A hand-rolled `writeContract()` must call `estimateTransactionFees()` first. |
+| The approval gate never opens | No signer. `write()` short-circuits to a simulated receipt when the client is not connected. | Connect a wallet; the command bar shows whether one is linked. |
 | `Cannot convert undefined to a BigInt` | The chain object was hand-built instead of taken from the SDK. | Spread `chains.studioDevnet`; override only `rpcUrls`. |
 | `No account set` | The client has no account. | Connect an injected wallet, or pass an account. |
+| `E014 ... needs @allow_storage decorator` from `genvm-lint` | The linter's `E014` list predates the decorator spelling this contract's pinned runner exposes. A false positive, not a contract defect -- and why CI runs `validate`, `typecheck` and `check_abi.py` instead of `genvm-lint check`. | See the decorator note in section 5; the 33-test suite executes the contract for real. |
 | `Missing or invalid parameters` on a view | Usually correct: the row does not exist. `get_treaty(1)` on a contract whose `next_treaty_id` is 1 is an expected revert, not a fault. | Check `next_treaty_id` first. |
 | Board reads `ON-CHAIN / EMPTY` | The contract answered and holds no treaties. Enclaves are reached through treaties. | Run the agents (section 4), or point at a populated deployment. |
 | Board reads `SIMULATED` | The contract was unreachable. | Check `NEXT_PUBLIC_GENLAYER_RPC_URL` and network access. |
@@ -887,7 +1157,7 @@ under consensus, tier out, escrow moved, reputation rewritten.
 
 | Check | Command | Result |
 |---|---|---|
-| Contract lint | `genvm-lint check contracts/westphalia.py` | Lint passed (3 checks), Validation passed, 19 methods. |
+| Contract lint | `.venv/bin/genvm-lint check contracts/westphalia.py` | Validation passed, 19 methods (9 view, 10 write). The lint half is linter-version dependent -- see the decorator note in section 5. |
 | Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 33 passed. |
 | Agent tests | `.venv/bin/python -m pytest agent/ -q` | 23 passed. |
 | Test collection | `.venv/bin/python -m pytest --collect-only -q` | 56 collected. |
