@@ -1,0 +1,19 @@
+# Pytest configuration for the three suites in this repository.
+#
+#   tests/direct/       in-memory GenVM execution, no network    (~30ms per test)
+#   tests/integration/  full consensus against a live network    (gltest)
+#   agent/              the autonomous negotiators' pure unit tests
+#
+# testpaths deliberately names the two offline suites rather than the `tests/`
+# directory. Naming `tests` would pull tests/integration/ into a bare `pytest`
+# run, and those tests dial a real network and take minutes -- a default run
+# must not depend on one. Run them by path instead:
+#
+#   .venv/bin/python -m pytest -q                        # direct + agent
+#   gltest tests/integration -v -s                       # simulator (genlayer up)
+#   gltest tests/integration -v -s --network studio_devnet
+[tool.pytest.ini_options]
+testpaths = ["tests/direct", "agent"]
+markers = [
+    "integration: requires a live GenLayer network; run with gltest, not bare pytest",
+]

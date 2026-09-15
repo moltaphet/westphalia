@@ -1,0 +1,51 @@
+# Network selection for the gltest integration suite (tests/integration/).
+#
+# The default is `localnet` -- the in-process GenLayer simulator started with
+# `genlayer up`. That is the network the integration suite is written against:
+# it needs no funding and no external endpoint, so a reviewer can run the full
+# consensus path on their own machine.
+#
+# `studio_devnet` is the preconfigured name for GenLayer Studio Net (chain
+# 61997), which is where the recorded deployment in deployments/studio-dev.json
+# lives. Its URL is set explicitly rather than left to the preset: genlayer-py's
+# bundled `studio_devnet` chain still points at studio-dev.genlayer.com, while
+# the hackathon brief names studio-next.genlayer.com. Both hostnames serve chain
+# 61997 and answer identically, so this pins the documented one without
+# redefining the chain. Run against it with:
+#
+#   gltest tests/integration -v -s --network studio_devnet
+#
+# The direct suite (tests/direct/) and the agent suite (agent/) run entirely in
+# memory and never read this file's network -- only tests/integration/ dials out.
+networks:
+  default: localnet
+
+  localnet:
+    url: "http://127.0.0.1:4000/api"
+    # The localnet's consensus worker stalls once per process lifetime, for
+    # exactly 300s -- aiohttp's default total timeout. The stall is in the
+    # simulator, not in the contract: after the first transaction that supplies
+    # per-transaction validators (every dispute round here does), the worker
+    # restores its standing validator snapshot and calls
+    # Manager.stop_module("llm"), which posts to the genvm-modules manager and
+    # never gets an answer. The worker is single-threaded over transactions
+    # (max_parallel_txs=1), so nothing else is claimed for those 300s, and any
+    # transaction submitted behind it sits in PENDING.
+    #
+    # It resolves itself -- the transaction that timed out is finalized seconds
+    # after the stall clears -- but gltest's default 50 retries x 3s = 150s
+    # window expires first, so a test that did nothing wrong reports
+    # "did not reach 'decided'". 200 x 3s = 600s clears the 300s stall twice
+    # over while still surfacing a genuinely stuck network. Set only on
+    # localnet: the stall is a property of the pinned simulator image, and
+    # studio_devnet has neither the stall nor an appetite for 10-minute waits.
+    default_wait_interval: 3000
+    default_wait_retries: 200
+
+  studio_devnet:
+    url: "https://studio-next.genlayer.com/api"
+
+paths:
+  contracts: "contracts"
+
+environment: .env
