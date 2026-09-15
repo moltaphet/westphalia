@@ -26,6 +26,7 @@ import {
 import type { TrackedStatus } from "@genlayer/transaction-kit";
 import { fetchChainSnapshot } from "./chainState";
 import { ARCHETYPE_PRESETS } from "./archetypes";
+import { orderEnclaves } from "./world";
 
 // Biome + telemetry presets used when founding a new realm of each archetype.
 // Defined in ./archetypes so the on-chain state mapper can share one palette
@@ -647,7 +648,10 @@ export function useWestphaliaStore() {
           governance: input.governance,
           spawnedAt: Date.now(),
         };
-        setEnclaves((prev) => [...prev, enclave]);
+        // Inserted in canonical order rather than appended, so the island this
+        // renders at is the same slot the next chain sync will put it in. An
+        // append would place it last and then hop it into place a moment later.
+        setEnclaves((prev) => orderEnclaves([...prev, enclave]));
         pushLedger({
           block: 1843000 + seq,
           kind: "realm-founded",

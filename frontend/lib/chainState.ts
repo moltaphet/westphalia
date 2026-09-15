@@ -17,6 +17,7 @@
 
 import { attoToGen, type DiplomaticContract } from "./contract";
 import { presetFor, elevationSeedFor } from "./archetypes";
+import { orderEnclaves } from "./world";
 import type {
   AgentEnclave,
   Archetype,
@@ -300,7 +301,13 @@ export function mapRecords(raw: RawRecords): ChainSnapshot {
     .sort((a, b) => b.chainId - a.chainId)
     .map(({ chainId, ev }) => ({ ...ev, id: `chain-t${chainId}` }));
 
-  return { overview, treaties, enclaves: [...enclaveById.values()], ledger };
+  // Sorted into the board's canonical order. Party addresses are discovered by
+  // walking the treaty list, so a dropped treaty read (or a treaty list that
+  // grows between polls) changes this array's order without any enclave having
+  // moved -- and the archipelago lays itself out positionally, so that
+  // reordering used to teleport every island. Sorting here fixes it for every
+  // consumer at once, not just the board.
+  return { overview, treaties, enclaves: orderEnclaves([...enclaveById.values()]), ledger };
 }
 
 // The full protocol state as the chain currently holds it, or null when the

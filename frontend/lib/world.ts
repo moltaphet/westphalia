@@ -85,9 +85,37 @@ export interface IslandLayout {
   ring: number;
 }
 
-// Compute island layouts for the current set of enclaves.
+// Canonical enclave order for the archipelago.
+//
+// Slot assignment below is positional -- ring 1 takes the first four enclaves,
+// ring 2 the next six, ring 3 the rest -- so the ORDER of the array handed to
+// buildLayouts decides where every island stands. That order used to come
+// straight from whatever the store happened to hold, and it is not stable:
+// the chain sync discovers enclaves transitively through the treaty list, so a
+// single transient get_treaty failure drops that treaty and reshuffles every
+// party after it; and a locally founded realm is appended optimistically and
+// then re-sorted by the next sync. In both cases the array reordered while no
+// island had actually moved, and because the layout indexed off that array,
+// the whole archipelago teleported.
+//
+// Sorting by id first makes the layout a pure function of the SET of enclaves
+// rather than of the sequence they arrived in. Ids are stable and unique by
+// construction: the live mapper uses the lowercased address (see
+// chainState.mapRecords) and the simulated seed uses a fixed slug.
+export function compareEnclaves(a: AgentEnclave, b: AgentEnclave): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+// Non-mutating, so callers can sort a React state array without touching it.
+export function orderEnclaves(enclaves: AgentEnclave[]): AgentEnclave[] {
+  return [...enclaves].sort(compareEnclaves);
+}
+
+// Compute island layouts for the current set of enclaves. Sorted first -- see
+// compareEnclaves above; without it the islands move for reasons the chain
+// never reported.
 export function buildLayouts(enclaves: AgentEnclave[]): IslandLayout[] {
-  return enclaves.map((e, i) => {
+  return orderEnclaves(enclaves).map((e, i) => {
     const slot = orbitSlot(i);
     // Outer rings render slightly smaller islands to keep the map readable.
     const radius = slot.ring === 1 ? 6 : slot.ring === 2 ? 5 : 4;
