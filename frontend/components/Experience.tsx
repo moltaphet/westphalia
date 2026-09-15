@@ -64,6 +64,16 @@ export default function Experience() {
             onSelect={s.selectEnclave}
             onSelectTreaty={s.setSelectedTreaty}
           />
+          {/* The board holds no islands until the first chain read resolves --
+              see the initial state in store.ts. Say so, rather than leaving a
+              bare archipelago that reads as a broken one. */}
+          {s.stateSource === "loading" && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="font-mono text-xs tracking-widest text-cyan-400 animate-pulseGlow">
+                READING PROTOCOL STATE...
+              </div>
+            </div>
+          )}
           <HudOverlay
             state={s.state}
             selectedId={s.selectedId}

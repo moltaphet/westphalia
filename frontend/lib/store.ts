@@ -157,12 +157,26 @@ let seq = 1000;
 // Central state hub for the dynamic archipelago. Owns enclaves, treaties,
 // ledger, selection/focus, network/wallet, and the transaction pipeline.
 export function useWestphaliaStore() {
-  const [enclaves, setEnclaves] = useState<AgentEnclave[]>(INITIAL_ENCLAVES);
-  const [treaties, setTreaties] = useState<Treaty[]>(TREATIES);
-  const [ledger, setLedger] = useState<LedgerEvent[]>(LEDGER);
+  // The board starts EMPTY, not seeded.
+  //
+  // It used to start on INITIAL_ENCLAVES and swap to the live archipelago when
+  // the first chain read landed a few seconds later. Because the seed holds a
+  // different number of enclaves than the chain does, that swap did not read as
+  // a refresh -- islands appeared out of nowhere and others changed identity
+  // under the viewer, with the seed's names and telemetry gone. Every visitor
+  // got a flash of fabricated protocol state before the real one, on a board
+  // whose entire claim is that it is not a mock.
+  //
+  // An empty archipelago plus a "loading" source says the same thing honestly
+  // and renders the same islands steady. The seed still appears, but only once
+  // a read has actually failed -- see syncChain, and the reviewer-mode path it
+  // has always had.
+  const [enclaves, setEnclaves] = useState<AgentEnclave[]>([]);
+  const [treaties, setTreaties] = useState<Treaty[]>([]);
+  const [ledger, setLedger] = useState<LedgerEvent[]>([]);
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>("enclave");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTreaty, setSelectedTreaty] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
 
@@ -173,10 +187,10 @@ export function useWestphaliaStore() {
   // data came from -- see stateSource for that.
   const [reviewerMode, setReviewerMode] = useState(true);
 
-  // Where the board's islands and treaties came from. "live" and "empty" both
-  // mean the contract answered; "simulated" means it could not be reached and
-  // the reviewer-mode seed data is on screen instead.
-  const [stateSource, setStateSource] = useState<StateSource>("simulated");
+  // Where the board's islands and treaties came from. Starts at "loading"
+  // because the initial board is empty and nothing has answered yet; the first
+  // syncChain resolution moves it to live / empty / simulated.
+  const [stateSource, setStateSource] = useState<StateSource>("loading");
   const [lastReceipt, setLastReceipt] = useState<TxReceipt | null>(null);
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
   const [chainOverview, setChainOverview] = useState<ChainOverview | null>(null);
@@ -253,22 +267,33 @@ export function useWestphaliaStore() {
   // gated on a connection. Three outcomes, each rendered honestly:
   //   - contract answered with enclaves -> the live archipelago
   //   - contract answered, nothing founded -> an empty board, not a mock one
-  //   - contract unreachable -> nothing is replaced. On a first load that
-  //     leaves the simulated seed, which is what the board is showing and what
-  //     stateSource still says; on a later one it leaves the last real
-  //     snapshot standing rather than rolling a live board back to the seed.
+  //   - contract unreachable -> on a first read the reviewer seed, labelled
+  //     simulated; on a later one nothing is replaced, so a live board that
+  //     misses a refresh stays on screen rather than rolling back to the seed.
+  // Whether anything has been put on the board yet -- a chain snapshot, or the
+  // reviewer seed standing in for one. Until it is true the board is
+  // legitimately empty and a failed read has something it may fall back to.
+  const settled = useRef(false);
+
   const syncChain = useCallback(async () => {
     const snap = await fetchChainSnapshot(contractRef.current);
     if (!snap) {
-      // Leave the board exactly as it was. A refresh that could not read the
-      // chain is not evidence that the protocol is empty, nor that the
-      // simulated seed should come back -- the last snapshot is still the best
-      // account of the protocol on hand. stateSource keeps whatever it last
-      // was: "simulated" for a first load that never reached the chain, where
-      // the seed is genuinely what is on screen, and "live" for a board that
-      // is stale but real.
+      // A refresh that could not read the chain is not evidence that the
+      // protocol is empty. If something is already on screen it remains the
+      // best account of the protocol on hand, so leave it and its source
+      // alone -- "live" for a board that is stale but real. If nothing is,
+      // then this is the FIRST read failing, and the reviewer seed is exactly
+      // what it exists for.
+      if (settled.current) return;
+      settled.current = true;
+      setEnclaves(orderEnclaves(INITIAL_ENCLAVES));
+      setTreaties(TREATIES);
+      setLedger(LEDGER);
+      setSelectedId(INITIAL_ENCLAVES[0]?.id ?? null);
+      setStateSource("simulated");
       return;
     }
+    settled.current = true;
     setChainOverview(snap.overview);
     setEnclaves(snap.enclaves);
     setTreaties(snap.treaties);
@@ -276,9 +301,9 @@ export function useWestphaliaStore() {
     // print fabricated history under real islands -- events naming enclaves the
     // contract has never heard of.
     setLedger(snap.ledger);
-    // Keep the selection pointing at an enclave that actually exists. The
-    // initial selection is a seed id, so without this it dangles as soon as the
-    // live board replaces the simulated one.
+    // Keep the selection pointing at an enclave that actually exists. When the
+    // seed was installed above the selection is one of its ids, so without this
+    // it dangles as soon as the live board replaces the simulated one.
     setSelectedId((prev) =>
       prev && snap.enclaves.some((e) => e.id === prev)
         ? prev
@@ -379,13 +404,20 @@ export function useWestphaliaStore() {
   const enterReviewerMode = useCallback(() => {
     setReviewerMode(true);
     setConnected(false);
+    // Reviewer mode is read-only, not simulated: it changes no data. Say only
+    // what is actually on screen -- the seed is installed by syncChain when a
+    // read fails, not by the mode switch, so on a live board this must not
+    // claim simulated data was loaded.
     pushLedger({
       block: 1843000 + seq,
       kind: "consensus-verdict",
       actor: "protocol",
-      message: "Ephemeral reviewer mode engaged. Read-only simulation data loaded.",
+      message:
+        stateSource === "simulated"
+          ? "Ephemeral reviewer mode engaged. Read-only simulation data loaded."
+          : "Ephemeral reviewer mode engaged. Reading only; no wallet attached.",
     });
-  }, [pushLedger]);
+  }, [pushLedger, stateSource]);
 
   const proposeTreaty = useCallback(
     async (partnerId: string, kind: TreatyKind, terms: string, bondGen: number) => {

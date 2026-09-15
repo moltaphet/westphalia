@@ -31,8 +31,11 @@ function Divider() {
   return <span className="h-5 w-px bg-zinc-800" />;
 }
 
-function StabilityGauge({ value }: { value: number }) {
+function StabilityGauge({ value, pending }: { value: number; pending: boolean }) {
   const color = value >= 75 ? "#10b981" : value >= 45 ? "#f59e0b" : "#ef4444";
+  // Before the first read resolves there is no index to report. An empty board
+  // averages to zero, which would render as a red 0% -- a claim about protocol
+  // health that nothing has measured yet.
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5 text-[9px] tracking-widest text-slate-400">
@@ -42,11 +45,17 @@ function StabilityGauge({ value }: { value: number }) {
         <div className="h-1.5 w-28 overflow-hidden rounded-full bg-zinc-800">
           <div
             className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${value}%`, backgroundColor: color }}
+            style={{
+              width: pending ? "0%" : `${value}%`,
+              backgroundColor: pending ? "#71717a" : color,
+            }}
           />
         </div>
-        <span className="text-[11px] font-bold tabular-nums" style={{ color }}>
-          {value}%
+        <span
+          className="text-[11px] font-bold tabular-nums"
+          style={{ color: pending ? "#71717a" : color }}
+        >
+          {pending ? "--" : `${value}%`}
         </span>
       </div>
     </div>
@@ -96,6 +105,9 @@ export default function TopBar({
   // Live on-chain escrow (atto -> whole GEN) replaces the simulated TVL
   // whenever the wallet is connected and the overview has synced.
   const liveTvlGen = chainOverview ? attoToGen(chainOverview.lockedEscrow) : null;
+  // Nothing has answered the chain yet, so every figure below is the sum of an
+  // empty board rather than a measurement. They read as placeholders, not zero.
+  const pending = stateSource === "loading";
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 w-full border-b border-zinc-800/60 bg-zinc-950/90 font-mono shadow-2xl backdrop-blur-xl">
@@ -120,25 +132,31 @@ export default function TopBar({
                   reviewer-mode seed, and the TVL figure alone does not say. */}
               <span
                 title={
-                  stateSource === "simulated"
-                    ? "The deployed contract could not be reached, so this board is seed data."
-                    : stateSource === "empty"
-                      ? "The deployed contract answered and has no sovereignties founded yet."
-                      : "Islands and treaties read from the deployed contract."
+                  stateSource === "loading"
+                    ? "Reading the deployed contract. The board stays empty until it answers."
+                    : stateSource === "simulated"
+                      ? "The deployed contract could not be reached, so this board is seed data."
+                      : stateSource === "empty"
+                        ? "The deployed contract answered and has no sovereignties founded yet."
+                        : "Islands and treaties read from the deployed contract."
                 }
                 className={`rounded border px-1.5 py-0.5 text-[8px] font-bold tracking-[0.2em] ${
                   stateSource === "live"
                     ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-300"
                     : stateSource === "empty"
                       ? "border-zinc-600 bg-zinc-800/60 text-slate-400"
-                      : "border-amber-400/50 bg-amber-500/15 text-amber-300"
+                      : stateSource === "loading"
+                        ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-300"
+                        : "border-amber-400/50 bg-amber-500/15 text-amber-300"
                 }`}
               >
                 {stateSource === "live"
                   ? "ON-CHAIN"
                   : stateSource === "empty"
                     ? "ON-CHAIN / EMPTY"
-                    : "SIMULATED"}
+                    : stateSource === "loading"
+                      ? "READING CHAIN"
+                      : "SIMULATED"}
               </span>
             </div>
           </div>
@@ -146,23 +164,27 @@ export default function TopBar({
 
         {/* Center cluster: protocol telemetry with breathing dividers */}
         <div className="hidden items-center gap-4 lg:flex">
-          <StabilityGauge value={state.stabilityIndex} />
+          <StabilityGauge value={state.stabilityIndex} pending={pending} />
           <Divider />
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1.5 text-[9px] tracking-widest text-slate-400">
               <Coins size={11} /> TOTAL VALUE LOCKED
             </div>
             <div className="text-[13px] font-bold tabular-nums text-cyan-300">
-              {liveTvlGen !== null
-                ? `${liveTvlGen.toLocaleString("en-US", { maximumFractionDigits: 1 })} GEN (chain)`
-                : `${state.totalEscrowGen.toLocaleString("en-US")} GEN`}
+              {pending ? (
+                <span className="text-zinc-500">--</span>
+              ) : liveTvlGen !== null ? (
+                `${liveTvlGen.toLocaleString("en-US", { maximumFractionDigits: 1 })} GEN (chain)`
+              ) : (
+                `${state.totalEscrowGen.toLocaleString("en-US")} GEN`
+              )}
             </div>
           </div>
           <Divider />
           <div className="flex flex-col gap-1">
             <div className="text-[9px] tracking-widest text-slate-400">SOVEREIGNTIES</div>
             <div className="text-[13px] font-bold tabular-nums text-emerald-300">
-              {state.enclaves.length}
+              {pending ? <span className="text-zinc-500">--</span> : state.enclaves.length}
             </div>
           </div>
           {chainOverview && (
