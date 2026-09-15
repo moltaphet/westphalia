@@ -49,6 +49,23 @@ export const DIPLOMATIC_ABI: AbiEntry[] = [
     outputs: [{ name: "enclave", type: "json" }],
   },
   {
+    // Enumerable roster: total enclaves ever founded (monotonic).
+    type: "function",
+    name: "get_enclave_count",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "count", type: "string" }],
+  },
+  {
+    // Enumerable roster: the enclave at a slot, with its address and an
+    // `exists` flag (false for a slot whose enclave later withdrew).
+    type: "function",
+    name: "get_enclave_by_index",
+    stateMutability: "view",
+    inputs: [{ name: "index", type: "uint256" }],
+    outputs: [{ name: "enclave", type: "json" }],
+  },
+  {
     type: "function",
     name: "whoami",
     stateMutability: "view",
@@ -123,6 +140,14 @@ export const DIPLOMATIC_ABI: AbiEntry[] = [
     type: "function",
     name: "ratify_treaty",
     stateMutability: "payable",
+    inputs: [{ name: "treaty_id", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    // Bounded liveness: proposer reclaims its bond from a still-PROPOSED treaty.
+    type: "function",
+    name: "cancel_proposal",
+    stateMutability: "nonpayable",
     inputs: [{ name: "treaty_id", type: "uint256" }],
     outputs: [],
   },

@@ -1,6 +1,6 @@
+# v0.3.0
 # { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 
-# v0.3.0
 # Westphalia Diplomatic Protocol - V3 (production-grade sovereign diplomacy).
 # On-chain multi-LLM consensus protocol using GenVM equivalence validation.
 # Autonomous AI agents found sovereign enclaves, lock typed bilateral treaty
@@ -32,6 +32,12 @@ import genlayer as gl
 from genlayer import Address, u256
 from genlayer.storage import TreeMap
 
+# genvm-lint requires the bare name `allow_storage` on storage dataclasses.
+# Bind it to the exact same decorator object the contract has always deployed
+# with (gl.storage.allow) so the decorator BEHAVIOUR is byte-for-byte unchanged
+# -- only the name the linter matches on is.
+allow_storage = gl.storage.allow
+
 # --- Error classification (deterministic business errors) -------------------
 ERR_UNAUTHORIZED = "ERR_UNAUTHORIZED_PARTY"
 ERR_NOT_ACTIVE = "ERR_TREATY_NOT_ACTIVE"
@@ -47,6 +53,7 @@ ERR_UNSAFE_URL = "ERR_UNSAFE_TELEMETRY_URL"
 ERR_COOLDOWN = "ERR_DISPUTE_COOLDOWN"
 ERR_EMPTY_EVIDENCE = "ERR_EMPTY_EVIDENCE"
 ERR_ORACLE_REQUIRED = "ERR_ORACLE_URL_REQUIRED"
+ERR_TRANSFER = "ERR_TRANSFER_FAILED_RESTORED"
 
 # --- Error classification (non-deterministic / oracle failures) -------------
 ERR_TRANSIENT = "[TRANSIENT]"
@@ -319,8 +326,20 @@ def _fetch_one(url: str) -> dict:
         return {"transient": False, "reachable": False, "bps": 0, "contradiction": False}
 
     try:
-        body = res.body or b""
-        data = json.loads(body.decode("utf-8"))
+        # res.body may arrive as bytes OR str depending on the runner and the
+        # response content type. Blindly calling .decode() on a str raised
+        # AttributeError, which the except below turned into a false
+        # [TRANSIENT] -- a perfectly good, fully-reachable feed reported as an
+        # outage, forcing needless arbitration retries. Normalize both shapes
+        # to text first, then parse.
+        body = res.body
+        if isinstance(body, (bytes, bytearray)):
+            text = bytes(body).decode("utf-8")
+        elif body is None:
+            text = ""
+        else:
+            text = body
+        data = json.loads(text)
     except Exception:
         return {"transient": True, "reachable": False, "bps": 0, "contradiction": False}
 
@@ -456,7 +475,7 @@ def _validate_params(kind: str, params_json: str) -> str:
     return json.dumps(normalized, sort_keys=True)
 
 
-@gl.storage.allow
+@allow_storage
 @dataclass
 class Enclave:
     owner: Address
@@ -469,7 +488,7 @@ class Enclave:
     created_at: u256  # maturation clock (unix seconds)
 
 
-@gl.storage.allow
+@allow_storage
 @dataclass
 class Treaty:
     kind: str
@@ -505,6 +524,14 @@ class Westphalia(gl.contract.Contract):
     total_claimable: u256
     rep_history: TreeMap[str, u256]  # address hex -> last known reputation (survives exit)
     governor: Address  # protocol treasury steward (deployer at genesis)
+    # Enumerable roster index. The contract exposes no other way to list
+    # enclaves (get_enclave answers only for a known address), so the frontend
+    # used to derive the set transitively by walking treaty parties -- and any
+    # enclave never party to a treaty was invisible on load. These two fields
+    # make the roster directly enumerable. Appended at the END of the schema so
+    # the storage layout of every field above is unchanged.
+    enclave_index: TreeMap[u256, str]  # sequential slot -> owner address hex
+    enclave_count: u256  # monotonic count of enclaves ever founded
 
     def __init__(self):
         self.next_treaty_id = 1
@@ -513,6 +540,7 @@ class Westphalia(gl.contract.Contract):
         self.reserves = 0
         self.total_claimable = 0
         self.governor = gl.message.sender_address
+        self.enclave_count = 0
 
     # ----------------------------------------------------------------- views
     @gl.public.view
@@ -554,6 +582,36 @@ class Westphalia(gl.contract.Contract):
             raise gl.vm.UserError(f"{ERR_STATE} unknown enclave")
         e = self.enclaves[owner_hex]
         return {
+            "name": e.name,
+            "archetype": e.archetype,
+            "collateral": str(e.collateral),
+            "reputation": str(e.reputation),
+            "status": e.status,
+            "created_at": str(e.created_at),
+        }
+
+    @gl.public.view
+    def get_enclave_count(self) -> str:
+        """Number of enclaves ever founded (monotonic; includes any that later
+        withdrew). The frontend walks 0..count-1 through get_enclave_by_index."""
+        return str(self.enclave_count)
+
+    @gl.public.view
+    def get_enclave_by_index(self, index: u256) -> dict:
+        """Enumerable roster access. Returns the enclave at a roster slot, with
+        its owner address, so the board can list every sovereignty directly
+        instead of deriving the set from treaty parties (treatyless enclaves
+        used to vanish). A slot whose enclave has since withdrawn its collateral
+        is a tombstone -- exists=False -- so enumeration stays stable."""
+        if index >= self.enclave_count:
+            raise gl.vm.UserError(f"{ERR_STATE} enclave index out of range")
+        key = self.enclave_index[index]
+        if key not in self.enclaves:
+            return {"address": key, "exists": False}
+        e = self.enclaves[key]
+        return {
+            "address": key,
+            "exists": True,
             "name": e.name,
             "archetype": e.archetype,
             "collateral": str(e.collateral),
@@ -636,6 +694,12 @@ class Westphalia(gl.contract.Contract):
         )
         self.rep_history[key] = prior_rep
         self.total_collateral += gl.message.value
+        # Register the enclave in the enumerable roster index so the frontend
+        # can list agents directly rather than inferring them from treaties.
+        # A re-founded address (one that withdrew and returns) takes a fresh
+        # slot; the index is append-only and the frontend dedupes by address.
+        self.enclave_index[self.enclave_count] = key
+        self.enclave_count += 1
 
     @gl.public.write.payable
     def propose_treaty(
@@ -750,6 +814,34 @@ class Westphalia(gl.contract.Contract):
         self.treaties[treaty_id] = t
         self.locked_escrow += gl.message.value
         self._bump_open(t.party_b.as_hex, 1)
+
+    # ------------------------------------------------ proposer withdrawal
+    @gl.public.write
+    def cancel_proposal(self, treaty_id: u256) -> None:
+        """Bounded-liveness / anti-hostage: the proposer reclaims its own bond
+        from a still-PROPOSED treaty the counterparty has neither ratified nor
+        rejected. Without this the proposer's bond stays locked -- and its
+        withdraw_collateral blocked via open_treaties -- until expiry, up to a
+        year away. Only the proposer (party_a) can cancel, and only while the
+        counterparty has posted nothing (bond_b is still 0 in PROPOSED), so no
+        counterparty value is ever touched.
+
+        Solvency is preserved: locked_escrow drops by exactly the amount moved
+        into party_a's claimable balance, and self.balance does not change."""
+        if treaty_id not in self.treaties:
+            raise gl.vm.UserError(f"{ERR_STATE} unknown treaty")
+        t = self.treaties[treaty_id]
+        if t.status != ST_PROPOSED:
+            raise gl.vm.UserError(f"{ERR_STATE} only a proposed treaty can be cancelled")
+        if gl.message.sender_address != t.party_a:
+            raise gl.vm.UserError(f"{ERR_UNAUTHORIZED} only the proposer may cancel")
+        bond = t.bond_a
+        self.locked_escrow -= bond
+        self._credit(t.party_a.as_hex, bond)
+        self._bump_open(t.party_a.as_hex, -1)
+        t.bond_a = 0
+        t.status = ST_SETTLED
+        self.treaties[treaty_id] = t
 
     # ------------------------------------------------ amicable dissolution
     @gl.public.write
@@ -1010,7 +1102,24 @@ class Westphalia(gl.contract.Contract):
         # `on` is keyword-only in the runner (gl.chain.IAccount.emit_transfer),
         # and `finalized` is named explicitly rather than left to the default so
         # the settlement stage is pinned in the source the validators review.
-        gl.chain.Account(gl.message.sender_address).emit_transfer(amount, on="finalized")
+        #
+        # Fund-safety guard. The debit is applied BEFORE the transfer is queued
+        # (Checks-Effects-Interactions, reentrancy-safe). If ENQUEUING the
+        # transfer raises synchronously -- a malformed account, a rejected emit
+        # -- the debit is rolled back and the call reverts, so a claimable
+        # balance is never destroyed without a transfer having been enqueued
+        # against it, and the holder can simply retry.
+        #
+        # Note on scope: emit_transfer(on="finalized") settles ASYNCHRONOUSLY,
+        # after this transaction. A failure at that later stage is outside this
+        # frame and cannot be caught here; the async emit model exposes no
+        # synchronous hook for it. This guard covers enqueue-time faults only.
+        try:
+            gl.chain.Account(gl.message.sender_address).emit_transfer(amount, on="finalized")
+        except Exception:
+            self.claimable[key] = amount
+            self.total_claimable += amount
+            raise gl.vm.UserError(f"{ERR_TRANSFER}")
         return str(amount)
 
     @gl.public.write
@@ -1127,3 +1236,4 @@ class Westphalia(gl.contract.Contract):
         # by the VM to the transaction timestamp (see genlayer.vm docs); the
         # direct-test harness patches it identically for warp() control.
         return int(datetime.now(timezone.utc).timestamp())
+    

@@ -295,19 +295,31 @@ export function useWestphaliaStore() {
     }
     settled.current = true;
     setChainOverview(snap.overview);
-    setEnclaves(snap.enclaves);
+    // Merge the on-chain roster with any enclave founded in THIS browser session
+    // that the snapshot does not yet include, so a just-founded realm is not
+    // wiped by the next sync before it is indexed on-chain. A session-founded
+    // enclave carries `spawnedAt` (see foundRealm) and a `realm-` id; once the
+    // chain reports that same id the chain copy wins.
+    setEnclaves((prev) => {
+      const incoming = new Set(snap.enclaves.map((e) => e.id));
+      const localPending = prev.filter(
+        (e) => e.spawnedAt !== undefined && !incoming.has(e.id)
+      );
+      return orderEnclaves([...snap.enclaves, ...localPending]);
+    });
     setTreaties(snap.treaties);
     // The feed is replaced with it. Leaving the simulated seed in place would
     // print fabricated history under real islands -- events naming enclaves the
     // contract has never heard of.
     setLedger(snap.ledger);
-    // Keep the selection pointing at an enclave that actually exists. When the
-    // seed was installed above the selection is one of its ids, so without this
-    // it dangles as soon as the live board replaces the simulated one.
+    // Keep the selection pointing at an enclave that still exists -- one the
+    // chain returned, or a realm founded this session (kept above). Otherwise
+    // fall back to the first on-chain enclave, or leave it where it is when the
+    // chain is empty so a fresh local realm stays selected.
     setSelectedId((prev) =>
-      prev && snap.enclaves.some((e) => e.id === prev)
+      prev && (snap.enclaves.some((e) => e.id === prev) || prev.startsWith("realm-"))
         ? prev
-        : (snap.enclaves[0]?.id ?? null)
+        : (snap.enclaves[0]?.id ?? prev ?? null)
     );
     setStateSource(snap.enclaves.length > 0 ? "live" : "empty");
   }, []);

@@ -90,12 +90,11 @@ export interface IslandLayout {
 // Slot assignment below is positional -- ring 1 takes the first four enclaves,
 // ring 2 the next six, ring 3 the rest -- so the ORDER of the array handed to
 // buildLayouts decides where every island stands. That order used to come
-// straight from whatever the store happened to hold, and it is not stable:
-// the chain sync discovers enclaves transitively through the treaty list, so a
-// single transient get_treaty failure drops that treaty and reshuffles every
-// party after it; and a locally founded realm is appended optimistically and
-// then re-sorted by the next sync. In both cases the array reordered while no
-// island had actually moved, and because the layout indexed off that array,
+// straight from whatever the store happened to hold, and it is not stable: a
+// locally founded realm is appended optimistically and re-sorted once the
+// roster read returns it, and an enclave entering or leaving between snapshots
+// shifts every island ranked after it. In both cases the array reordered while
+// no island had actually moved, and because the layout indexed off that array,
 // the whole archipelago teleported.
 //
 // Sorting by id first makes the layout a pure function of the SET of enclaves

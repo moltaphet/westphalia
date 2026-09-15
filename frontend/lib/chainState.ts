@@ -3,13 +3,15 @@
 //
 // Two on-chain shapes constrain this mapping:
 //
-//   1. There is no enclave enumerator. The contract exposes
-//      `get_enclave(owner_hex)` only, so the enclave set is derived
-//      transitively: walk the treaties and collect both party addresses. An
-//      enclave that has never been party to a treaty is therefore invisible
-//      here -- it exists on-chain and answers `get_enclave`, but nothing on the
-//      board can discover its address. Treaties are enumerable via
-//      `next_treaty_id`, which is why they are the entry point.
+//   1. The enclave set is read from the contract's enumerable roster index
+//      (`get_enclave_count` + `get_enclave_by_index`), so every founded
+//      sovereignty is discovered directly -- including one that has never been
+//      party to a treaty. (Earlier the contract exposed only
+//      `get_enclave(owner_hex)`, forcing a transitive walk over treaty parties,
+//      and treatyless enclaves were invisible and vanished on load; the index
+//      closes that.) Treaty parties are still merged in as a fallback for any
+//      address the index does not cover. Treaties remain enumerable via
+//      `next_treaty_id`.
 //
 //   2. Every amount is an atto-scale string, not a number. Values are narrowed
 //      through `attoToGen` (which divides with BigInt before converting) so a
@@ -327,7 +329,7 @@ export function mapRecords(raw: RawRecords): ChainSnapshot {
 
 // The full protocol state as the chain currently holds it, or null when the
 // contract could not be reached at all (offline, wrong address, RPC down).
-// The caller keeps the simulated board in that case rather than rendering an
+// The caller keeps the last good board in that case rather than rendering an
 // empty archipelago.
 export async function fetchChainSnapshot(
   contract: DiplomaticContract
@@ -340,15 +342,11 @@ export async function fetchChainSnapshot(
   // Every record below is read strictly, and one unreadable record aborts the
   // whole snapshot rather than shrinking it.
   //
-  // `read()` swallows a failed gen_call into null, so the lenient version of
-  // this walk silently reported a protocol holding fewer treaties and fewer
-  // enclaves than it does. That was visible on the board as islands vanishing
-  // outright -- the enclave record was simply absent from the array, so
-  // nothing could draw it -- with treaty links disappearing alongside, and the
-  // survivors jumping, because the archipelago is laid out positionally and
-  // dropping one enclave shifted every island ranked after it. All of that
-  // from one dropped socket. Returning null instead leaves the last good
-  // snapshot on screen, which syncChain already knows how to handle.
+  // `read()` swallows a failed gen_call into null, so a lenient walk silently
+  // reported a protocol holding fewer treaties and fewer enclaves than it does.
+  // That showed on the board as islands vanishing outright and the survivors
+  // jumping (the archipelago is laid out positionally). Returning null instead
+  // leaves the last good snapshot on screen, which syncChain already handles.
   const treaties: Record<string, unknown>[] = [];
   for (let id = 1; id < nextTreatyId; id++) {
     const rec = await readJsonStrict(contract, "get_treaty", [id]);
@@ -356,20 +354,44 @@ export async function fetchChainSnapshot(
     treaties.push({ ...rec, id });
   }
 
-  // Enclaves are reached transitively, through the treaty parties.
-  const partyAddrs: string[] = [];
-  for (const rec of treaties) {
-    for (const key of ["party_a", "party_b"]) {
-      const addr = asString(rec[key]);
-      if (addr.startsWith("0x") && !partyAddrs.includes(addr)) partyAddrs.push(addr);
-    }
+  // --- Enclaves: the on-chain enumerable roster index ----------------------
+  // The set is read directly from get_enclave_count + get_enclave_by_index, so
+  // a sovereignty that has never been party to a treaty is still discovered and
+  // drawn. The previous treaty-only walk could not see such enclaves, and they
+  // disappeared on every load/refresh. Treaty parties are merged in afterwards
+  // as a fallback for any address the index does not cover.
+  const enclaves: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const pushEnclave = (rec: Record<string, unknown>, addr: string) => {
+    const key = addr.toLowerCase();
+    if (!addr || seen.has(key)) return;
+    seen.add(key);
+    enclaves.push({ ...rec, address: addr });
+  };
+
+  // A null count is a transient read failure, not proof of an empty roster --
+  // the overview already answered -- so fall through to the treaty-party walk
+  // below rather than aborting or rendering an empty board. One retry first.
+  let countRaw = await contract.read<unknown>("get_enclave_count", []);
+  if (countRaw == null) countRaw = await contract.read<unknown>("get_enclave_count", []);
+  const count = countRaw == null ? 0 : Number(asString(countRaw, "0")) || 0;
+  for (let i = 0; i < count; i++) {
+    const rec = await readJsonStrict(contract, "get_enclave_by_index", [i]);
+    if (!rec) return null; // an in-range slot that will not read shrinks the roster; abort
+    if (rec.exists === false) continue; // tombstone: enclave withdrew its collateral
+    pushEnclave(rec, asString(rec.address));
   }
 
-  const enclaves: Record<string, unknown>[] = [];
-  for (const addr of partyAddrs) {
-    const rec = await readJsonStrict(contract, "get_enclave", [addr]);
-    if (!rec) return null;
-    enclaves.push({ ...rec, address: addr });
+  // Fallback: any treaty party not surfaced by the index (an older contract
+  // without the enumerator, or a record founded between the count read and now).
+  for (const t of treaties) {
+    for (const k of ["party_a", "party_b"]) {
+      const addr = asString(t[k]);
+      if (!addr.startsWith("0x") || seen.has(addr.toLowerCase())) continue;
+      const rec = await readJsonStrict(contract, "get_enclave", [addr]);
+      if (!rec) return null;
+      pushEnclave(rec, addr);
+    }
   }
 
   return mapRecords({ overview, treaties, enclaves });

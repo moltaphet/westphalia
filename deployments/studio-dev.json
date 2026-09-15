@@ -2,14 +2,45 @@
   "network": "studio-dev",
   "chain_id": 61997,
   "rpc_url": "https://studio-next.genlayer.com/api",
-  "contract_address": "0xB78A41624fe09163fee3159091E907B7b7Af9D00",
-  "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00",
+  "contract_address": "0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41",
+  "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41",
   "source": "contracts/westphalia.py",
   "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
-  "source_sha256_at_record": "aa87a828a401eef55a72058eb6bcc95ee3e869b7c940b10bef23e8c71050845a",
+  "source_sha256_at_record": "b4ac8d14b99b23fb5e226ec25aa0af6ff4d17103b181bf72e4cbe5b23061cf64",
+  "revision": "V3.1: adds the enumerable enclave roster index (get_enclave_count, get_enclave_by_index), the cancel_proposal bounded-liveness path, a claim_payout fund-safety guard, and bytes/str telemetry-body resilience.",
+  "public_methods": {
+    "views": [
+      "get_protocol_overview",
+      "get_treaty",
+      "get_enclave",
+      "get_enclave_count",
+      "get_enclave_by_index",
+      "whoami",
+      "sanitize_preview",
+      "is_safe_url",
+      "claimable_of",
+      "locked_treaty_count",
+      "required_dispute_bond"
+    ],
+    "writes": [
+      "found_sovereignty",
+      "propose_treaty",
+      "ratify_treaty",
+      "cancel_proposal",
+      "dissolve_treaty",
+      "exit_treaty",
+      "trigger_dispute",
+      "claim_payout",
+      "drain_reserves",
+      "recover_bond",
+      "withdraw_collateral"
+    ],
+    "new_in_this_revision": ["get_enclave_count", "get_enclave_by_index", "cancel_proposal"],
+    "count": "22 (11 view, 11 write)"
+  },
   "verification": {
-    "method": "live view reads via genlayer-js at the current head",
-    "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address. The source hash above is the repository revision this record was written against; that the deployed code matches it is established behaviourally, by the binding comparison below, because GenVM exposes no deployed-code read.",
+    "method": "live view reads via genlayer-js / genlayer-py at the current head",
+    "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address. The source hash above is the repository revision this record was written against. That the roster index is genuinely part of the deployed revision is established behaviourally: get_enclave_count answers on this address (a method that did not exist on the predecessor), and get_enclave_by_index(0) reverts out-of-range on the empty roster exactly as the guard specifies.",
     "observed_at_deploy": {
       "get_protocol_overview": {
         "balance": "0",
@@ -20,83 +51,20 @@
         "total_claimable": "0",
         "total_collateral": "0"
       },
+      "get_enclave_count": "0",
+      "get_enclave_by_index(0)": "reverts ERR_INVALID_STATE (index out of range) -- correct for an empty roster",
       "required_dispute_bond_for_fresh_address": "500000000000000000000",
       "claimable_of_for_fresh_address": "0"
-    },
-    "binding_comparison_against_predecessor": {
-      "result": "identical",
-      "identical_bindings": [
-        "sanitize_preview(\"<b>hi</b> <script>x</script> a&b \\\"q\\\"\")",
-        "is_safe_url(\"https://example.com/x\")",
-        "is_safe_url(\"http://127.0.0.1/admin\")",
-        "is_safe_url(\"ftp://x.com\")",
-        "whoami()",
-        "required_dispute_bond(zero address)",
-        "claimable_of(zero address)",
-        "locked_treaty_count(zero address)"
-      ],
-      "only_difference": "get_protocol_overview, which differs solely in state fields (balance, next_treaty_id); every field's key set and type are the same",
-      "conclusion": "Same source, freshly deployed and empty. Not a different revision."
-    },
-    "observed_at_current_head": {
-      "captured_after": "the end-to-end autonomous agent duet (agent/demo.py, no --fresh): found, propose, reject, adapt, ratify, dispute, verdict",
-      "get_protocol_overview": {
-        "balance": "2500000000000000000000",
-        "locked_escrow": "700000000000000000000",
-        "next_treaty_id": "3",
-        "reserves": "0",
-        "solvent": true,
-        "total_claimable": "1500000000000000000000",
-        "total_collateral": "300000000000000000000"
-      },
-      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (300 + 700 + 0 + 1500 == 2500 GEN)",
-      "treaties": [
-        {
-          "id": 1,
-          "status": "PROPOSED",
-          "kind": "DATA_SHARING",
-          "bond_a": "700000000000000000000",
-          "bond_b": "0",
-          "note": "Alice's deliberately loose opening offer. Meridian rejected it on four enumerated charter violations; the bond stays locked because the offer is still standing."
-        },
-        {
-          "id": 2,
-          "status": "SETTLED",
-          "kind": "DATA_SHARING",
-          "bond_a": "0",
-          "bond_b": "0",
-          "note": "The compliant superseding offer. Meridian ratified it, then Halcyon disputed it; the quorum returned CRITICAL_BREACH and the escrow settled at zero."
-        }
-      ],
-      "enclaves": [
-        {
-          "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
-          "name": "Halcyon",
-          "archetype": "Autonomous Arbiter",
-          "status": "ACTIVE",
-          "reputation": "65",
-          "collateral": "150000000000000000000",
-          "claimable": "1500000000000000000000"
-        },
-        {
-          "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
-          "name": "Meridian",
-          "archetype": "Oracle Collective",
-          "status": "SANCTIONED",
-          "reputation": "0",
-          "collateral": "150000000000000000000",
-          "claimable": "0"
-        }
-      ],
-      "verdict": "CRITICAL_BREACH",
-      "reputation_transition": "Halcyon 50 -> 65 (vindicated, REP_REWARD_CRITICAL); Meridian 50 -> 0 and SANCTIONED",
-      "note": "Every figure above is identical to the retired predecessor's final state, because the same source run by the same state-driven duet converges on the same protocol outcome. The predecessor was not a different revision; it was the same contract at the same point in its lifecycle."
-    },
-    "predecessor": {
-      "contract_address": "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
-      "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
-      "status": "retired from the repository, still live and readable on chain",
-      "observed_at_retirement": {
+    }
+  },
+  "state_note": "This address is freshly deployed and EMPTY: no enclaves, no treaties, next_treaty_id 1. The board therefore reads ON-CHAIN / EMPTY until the protocol is populated. To reproduce the demo state, run the autonomous duet and then the wider roster against this address (agent/chain.py already points here): `.venv/bin/python -m agent.demo` (found -> propose -> reject -> adapt -> ratify -> dispute -> verdict), then `.venv/bin/python -m agent.seed` (founds Vantage, Aegis, Quorum, Solstice and wires the star + mesh). With the V3.1 roster index the frontend now lists every founded enclave directly via get_enclave_count + get_enclave_by_index, so agents are visible even before they join a treaty. Both studio-next.genlayer.com and studio-dev.genlayer.com serve chain 61997 and answer identically; the repository standardises on studio-next, matching the hackathon brief.",
+  "predecessors": [
+    {
+      "contract_address": "0xB78A41624fe09163fee3159091E907B7b7Af9D00",
+      "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00",
+      "status": "superseded by this revision; still live and readable on chain",
+      "revision": "V3 (pre roster-index): enclaves were discoverable only transitively through treaty parties, so a treatyless enclave was invisible on the board.",
+      "observed_at_supersession": {
         "get_protocol_overview": {
           "balance": "2500000000000000000000",
           "locked_escrow": "700000000000000000000",
@@ -140,14 +108,15 @@
             "collateral": "150000000000000000000"
           }
         ],
-        "required_dispute_bond": {
-          "halcyon": "425000000000000000000",
-          "meridian": "750000000000000000000"
-        },
         "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (300 + 700 + 0 + 1500 == 2500 GEN)"
       }
+    },
+    {
+      "contract_address": "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+      "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+      "status": "earliest recorded deployment; retired from the repository, still live and readable on chain",
+      "note": "Reached the same Halcyon/Meridian end state independently, because the same source run by the same state-driven duet converges on the same protocol outcome."
     }
-  },
-  "state_note": "The live address carries the same populated end state as the retired predecessor, reached independently: the contract was deployed empty, and the state-driven agent duet was then run against it without --fresh, driving it through found -> propose -> reject -> adapt -> ratify -> dispute -> CRITICAL_BREACH. The board therefore reads ON-CHAIN (not ON-CHAIN / EMPTY): treaty 1 (Halcyon's loose opening offer, still standing with a 700 GEN bond) makes both enclaves reachable, since the contract has no enclave enumerator and enclaves are discovered only transitively through treaties. Both studio-next.genlayer.com and studio-dev.genlayer.com serve chain 61997 and answer identically; the repository standardises on studio-next, matching the hackathon brief.",
-  "supersedes": "The predecessor entry above, which this record now carries as history rather than as the live target."
+  ],
+  "supersedes": "0xB78A41624fe09163fee3159091E907B7b7Af9D00 (and, before it, 0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3), carried above as history rather than as the live target."
 }
