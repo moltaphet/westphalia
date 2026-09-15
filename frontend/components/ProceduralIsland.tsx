@@ -148,8 +148,28 @@ export default function ProceduralIsland({
         decay={2}
       />
 
-      {/* Terrain voxels */}
-      <Instances limit={terrain.length} range={terrain.length} castShadow receiveShadow>
+      {/* Terrain voxels.
+
+          frustumCulled is off deliberately -- turning it back on re-breaks the
+          board. Each <Instance> below is placed at an ABSOLUTE world coordinate
+          (island centre + tile offset) while this mesh itself sits at the group
+          origin, and drei writes those instance matrices from its own useFrame.
+          r3f runs useFrame subscribers BEFORE gl.render, so on the first frame
+          drei reads instance matrixWorld values that scene.updateMatrixWorld()
+          has not touched yet (identity), and three then caches a bounding
+          sphere built from those identity matrices -- a ~1-unit ball sitting at
+          the WORLD ORIGIN -- and never recomputes it. Culling then asks "is the
+          origin on screen?", so an island is dropped the moment the camera
+          orbits away from the hub, mid-screen and all at once, while its
+          geometry is perfectly fine. Culling per island would buy nothing here
+          anyway: the whole archipelago is one small scene. */}
+      <Instances
+        limit={terrain.length}
+        range={terrain.length}
+        frustumCulled={false}
+        castShadow
+        receiveShadow
+      >
         <boxGeometry args={[TILE * 0.96, 1, TILE * 0.96]} />
         <meshStandardMaterial roughness={0.45} metalness={0.35} />
         {terrain.map((t, i) => (
@@ -171,9 +191,10 @@ export default function ProceduralIsland({
         ))}
       </Instances>
 
-      {/* Glowing rune tiles */}
+      {/* Glowing rune tiles. Same frustumCulled reasoning as the terrain mesh
+          above -- identical absolute placement, identical stale bounding sphere. */}
       {runes.length > 0 && (
-        <Instances limit={runes.length} range={runes.length}>
+        <Instances limit={runes.length} range={runes.length} frustumCulled={false}>
           <boxGeometry args={[TILE * 0.5, 0.08, TILE * 0.5]} />
           <meshStandardMaterial
             color={enclave.biomeTheme.accent}
