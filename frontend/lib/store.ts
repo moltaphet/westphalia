@@ -253,11 +253,20 @@ export function useWestphaliaStore() {
   // gated on a connection. Three outcomes, each rendered honestly:
   //   - contract answered with enclaves -> the live archipelago
   //   - contract answered, nothing founded -> an empty board, not a mock one
-  //   - contract unreachable -> the simulated seed, labelled as such
+  //   - contract unreachable -> nothing is replaced. On a first load that
+  //     leaves the simulated seed, which is what the board is showing and what
+  //     stateSource still says; on a later one it leaves the last real
+  //     snapshot standing rather than rolling a live board back to the seed.
   const syncChain = useCallback(async () => {
     const snap = await fetchChainSnapshot(contractRef.current);
     if (!snap) {
-      setStateSource("simulated");
+      // Leave the board exactly as it was. A refresh that could not read the
+      // chain is not evidence that the protocol is empty, nor that the
+      // simulated seed should come back -- the last snapshot is still the best
+      // account of the protocol on hand. stateSource keeps whatever it last
+      // was: "simulated" for a first load that never reached the chain, where
+      // the seed is genuinely what is on screen, and "live" for a board that
+      // is stale but real.
       return;
     }
     setChainOverview(snap.overview);

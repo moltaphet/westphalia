@@ -101,6 +101,21 @@ async function readJson(
   return raw;
 }
 
+// One retry, then give up. Every record below is a single gen_call round-trip
+// against a public RPC, where a dropped socket or a slow validator is ordinary
+// rather than exceptional; two attempts absorb nearly all of that without a
+// visible stall. Null means "the chain could not be read", which callers must
+// keep distinct from "the chain says this record is empty".
+async function readJsonStrict(
+  contract: DiplomaticContract,
+  method: string,
+  args: unknown[]
+): Promise<Record<string, unknown> | null> {
+  const first = await readJson(contract, method, args);
+  if (first) return first;
+  return readJson(contract, method, args);
+}
+
 export interface ChainSnapshot {
   overview: ChainOverview;
   treaties: Treaty[];
@@ -322,12 +337,23 @@ export async function fetchChainSnapshot(
 
   const nextTreatyId = Number(asString(overview.next_treaty_id, "1")) || 1;
 
-  // Treaties are enumerable via the protocol counter; they are the entry point
-  // because there is no enclave enumerator (see the file header).
+  // Every record below is read strictly, and one unreadable record aborts the
+  // whole snapshot rather than shrinking it.
+  //
+  // `read()` swallows a failed gen_call into null, so the lenient version of
+  // this walk silently reported a protocol holding fewer treaties and fewer
+  // enclaves than it does. That was visible on the board as islands vanishing
+  // outright -- the enclave record was simply absent from the array, so
+  // nothing could draw it -- with treaty links disappearing alongside, and the
+  // survivors jumping, because the archipelago is laid out positionally and
+  // dropping one enclave shifted every island ranked after it. All of that
+  // from one dropped socket. Returning null instead leaves the last good
+  // snapshot on screen, which syncChain already knows how to handle.
   const treaties: Record<string, unknown>[] = [];
   for (let id = 1; id < nextTreatyId; id++) {
-    const rec = await readJson(contract, "get_treaty", [id]);
-    if (rec) treaties.push({ ...rec, id });
+    const rec = await readJsonStrict(contract, "get_treaty", [id]);
+    if (!rec) return null;
+    treaties.push({ ...rec, id });
   }
 
   // Enclaves are reached transitively, through the treaty parties.
@@ -341,8 +367,9 @@ export async function fetchChainSnapshot(
 
   const enclaves: Record<string, unknown>[] = [];
   for (const addr of partyAddrs) {
-    const rec = await readJson(contract, "get_enclave", [addr]);
-    if (rec) enclaves.push({ ...rec, address: addr });
+    const rec = await readJsonStrict(contract, "get_enclave", [addr]);
+    if (!rec) return null;
+    enclaves.push({ ...rec, address: addr });
   }
 
   return mapRecords({ overview, treaties, enclaves });
