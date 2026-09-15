@@ -10,7 +10,7 @@
   "verification": {
     "method": "live view reads via genlayer-js at the current head",
     "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address. The source hash above is the repository revision this record was written against; that the deployed code matches it is established behaviourally, by the binding comparison below, because GenVM exposes no deployed-code read.",
-    "observed_at_current_head": {
+    "observed_at_deploy": {
       "get_protocol_overview": {
         "balance": "0",
         "locked_escrow": "0",
@@ -37,6 +37,60 @@
       ],
       "only_difference": "get_protocol_overview, which differs solely in state fields (balance, next_treaty_id); every field's key set and type are the same",
       "conclusion": "Same source, freshly deployed and empty. Not a different revision."
+    },
+    "observed_at_current_head": {
+      "captured_after": "the end-to-end autonomous agent duet (agent/demo.py, no --fresh): found, propose, reject, adapt, ratify, dispute, verdict",
+      "get_protocol_overview": {
+        "balance": "2500000000000000000000",
+        "locked_escrow": "700000000000000000000",
+        "next_treaty_id": "3",
+        "reserves": "0",
+        "solvent": true,
+        "total_claimable": "1500000000000000000000",
+        "total_collateral": "300000000000000000000"
+      },
+      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (300 + 700 + 0 + 1500 == 2500 GEN)",
+      "treaties": [
+        {
+          "id": 1,
+          "status": "PROPOSED",
+          "kind": "DATA_SHARING",
+          "bond_a": "700000000000000000000",
+          "bond_b": "0",
+          "note": "Alice's deliberately loose opening offer. Meridian rejected it on four enumerated charter violations; the bond stays locked because the offer is still standing."
+        },
+        {
+          "id": 2,
+          "status": "SETTLED",
+          "kind": "DATA_SHARING",
+          "bond_a": "0",
+          "bond_b": "0",
+          "note": "The compliant superseding offer. Meridian ratified it, then Halcyon disputed it; the quorum returned CRITICAL_BREACH and the escrow settled at zero."
+        }
+      ],
+      "enclaves": [
+        {
+          "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
+          "name": "Halcyon",
+          "archetype": "Autonomous Arbiter",
+          "status": "ACTIVE",
+          "reputation": "65",
+          "collateral": "150000000000000000000",
+          "claimable": "1500000000000000000000"
+        },
+        {
+          "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+          "name": "Meridian",
+          "archetype": "Oracle Collective",
+          "status": "SANCTIONED",
+          "reputation": "0",
+          "collateral": "150000000000000000000",
+          "claimable": "0"
+        }
+      ],
+      "verdict": "CRITICAL_BREACH",
+      "reputation_transition": "Halcyon 50 -> 65 (vindicated, REP_REWARD_CRITICAL); Meridian 50 -> 0 and SANCTIONED",
+      "note": "Every figure above is identical to the retired predecessor's final state, because the same source run by the same state-driven duet converges on the same protocol outcome. The predecessor was not a different revision; it was the same contract at the same point in its lifecycle."
     },
     "predecessor": {
       "contract_address": "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
@@ -94,6 +148,6 @@
       }
     }
   },
-  "state_note": "The live address is a fresh deployment of the same source: empty, with next_treaty_id 1 and zero balance, so the board reads ON-CHAIN / EMPTY until the autonomous agents run against it. The predecessor block records the retired instance the documented end-to-end run executed against - it is kept because that run's figures are quoted throughout README.md, and because the board's state mapping is validated against that populated capture. Both studio-next.genlayer.com and studio-dev.genlayer.com serve chain 61997 and answer identically; the repository standardises on studio-next, matching the hackathon brief.",
+  "state_note": "The live address carries the same populated end state as the retired predecessor, reached independently: the contract was deployed empty, and the state-driven agent duet was then run against it without --fresh, driving it through found -> propose -> reject -> adapt -> ratify -> dispute -> CRITICAL_BREACH. The board therefore reads ON-CHAIN (not ON-CHAIN / EMPTY): treaty 1 (Halcyon's loose opening offer, still standing with a 700 GEN bond) makes both enclaves reachable, since the contract has no enclave enumerator and enclaves are discovered only transitively through treaties. Both studio-next.genlayer.com and studio-dev.genlayer.com serve chain 61997 and answer identically; the repository standardises on studio-next, matching the hackathon brief.",
   "supersedes": "The predecessor entry above, which this record now carries as history rather than as the live target."
 }
