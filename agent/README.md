@@ -173,7 +173,7 @@ That reject-then-accept script is locked by `test_decider.py`.
 
 ## On-chain interface used
 
-Contract `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3` on studio-dev (chain 61997).
+Contract `0xB78A41624fe09163fee3159091E907B7b7Af9D00` on studio-dev (chain 61997).
 
 - views: `get_protocol_overview`, `get_enclave`, `get_treaty`,
   `required_dispute_bond`, `claimable_of`

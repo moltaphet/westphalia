@@ -13,7 +13,7 @@ export const STUDIO_DEV: NetworkConfig = {
   chainId: 61997,
   rpcUrl:
     process.env.NEXT_PUBLIC_GENLAYER_RPC_URL ?? "https://studio-next.genlayer.com/api",
-  explorerUrl: "https://explorer-studio-dev.genlayer.com",
+  explorerUrl: "https://explorer-studio-next.genlayer.com",
 };
 
 export const STUDIO: NetworkConfig = {
@@ -21,7 +21,7 @@ export const STUDIO: NetworkConfig = {
   label: "GenLayer Studio",
   chainId: 61999,
   rpcUrl: "https://studio.genlayer.com/api",
-  explorerUrl: "https://explorer-studio-dev.genlayer.com",
+  explorerUrl: "https://explorer-studio-next.genlayer.com",
 };
 
 export const NETWORKS: NetworkConfig[] = [STUDIO_DEV, STUDIO];
@@ -37,7 +37,7 @@ export function networkByChainId(chainId: number): NetworkConfig | undefined {
 // deployment is a config change, not a code change.
 export const DIPLOMATIC_CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_DIPLOMATIC_CONTRACT_ADDRESS ??
-  "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3";
+  "0xB78A41624fe09163fee3159091E907B7b7Af9D00";
 
 // A genlayer-js chain object, as viem consumes it.
 //

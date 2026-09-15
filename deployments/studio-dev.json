@@ -1,16 +1,16 @@
 {
   "network": "studio-dev",
   "chain_id": 61997,
-  "rpc_url": "https://studio-dev.genlayer.com/api",
-  "contract_address": "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
-  "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+  "rpc_url": "https://studio-next.genlayer.com/api",
+  "contract_address": "0xB78A41624fe09163fee3159091E907B7b7Af9D00",
+  "explorer_url": "https://explorer-studio-next.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00",
   "source": "contracts/westphalia.py",
   "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
   "source_sha256_at_record": "aa87a828a401eef55a72058eb6bcc95ee3e869b7c940b10bef23e8c71050845a",
   "verification": {
-    "method": "live view reads via genlayer_py (deploy time) and genlayer-js (current head)",
-    "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address.",
-    "observed_at_deploy": {
+    "method": "live view reads via genlayer-js at the current head",
+    "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. Deployment is instead evidenced by live view reads answering from this address. The source hash above is the repository revision this record was written against; that the deployed code matches it is established behaviourally, by the binding comparison below, because GenVM exposes no deployed-code read.",
+    "observed_at_current_head": {
       "get_protocol_overview": {
         "balance": "0",
         "locked_escrow": "0",
@@ -23,57 +23,77 @@
       "required_dispute_bond_for_fresh_address": "500000000000000000000",
       "claimable_of_for_fresh_address": "0"
     },
-    "observed_at_current_head": {
-      "get_protocol_overview": {
-        "balance": "2500000000000000000000",
-        "locked_escrow": "700000000000000000000",
-        "next_treaty_id": "3",
-        "reserves": "0",
-        "solvent": true,
-        "total_claimable": "1500000000000000000000",
-        "total_collateral": "300000000000000000000"
-      },
-      "treaties": [
-        {
-          "id": 1,
-          "status": "PROPOSED",
-          "kind": "DATA_SHARING",
-          "bond_a": "700000000000000000000",
-          "bond_b": "0"
-        },
-        {
-          "id": 2,
-          "status": "SETTLED",
-          "kind": "DATA_SHARING",
-          "bond_a": "0",
-          "bond_b": "0"
-        }
+    "binding_comparison_against_predecessor": {
+      "result": "identical",
+      "identical_bindings": [
+        "sanitize_preview(\"<b>hi</b> <script>x</script> a&b \\\"q\\\"\")",
+        "is_safe_url(\"https://example.com/x\")",
+        "is_safe_url(\"http://127.0.0.1/admin\")",
+        "is_safe_url(\"ftp://x.com\")",
+        "whoami()",
+        "required_dispute_bond(zero address)",
+        "claimable_of(zero address)",
+        "locked_treaty_count(zero address)"
       ],
-      "enclaves": [
-        {
-          "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
-          "name": "Halcyon",
-          "archetype": "Autonomous Arbiter",
-          "status": "ACTIVE",
-          "reputation": "65",
-          "collateral": "150000000000000000000"
+      "only_difference": "get_protocol_overview, which differs solely in state fields (balance, next_treaty_id); every field's key set and type are the same",
+      "conclusion": "Same source, freshly deployed and empty. Not a different revision."
+    },
+    "predecessor": {
+      "contract_address": "0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+      "explorer_url": "https://explorer-studio-next.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3",
+      "status": "retired from the repository, still live and readable on chain",
+      "observed_at_retirement": {
+        "get_protocol_overview": {
+          "balance": "2500000000000000000000",
+          "locked_escrow": "700000000000000000000",
+          "next_treaty_id": "3",
+          "reserves": "0",
+          "solvent": true,
+          "total_claimable": "1500000000000000000000",
+          "total_collateral": "300000000000000000000"
         },
-        {
-          "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
-          "name": "Meridian",
-          "archetype": "Oracle Collective",
-          "status": "SANCTIONED",
-          "reputation": "0",
-          "collateral": "150000000000000000000"
-        }
-      ],
-      "required_dispute_bond": {
-        "halcyon": "425000000000000000000",
-        "meridian": "750000000000000000000"
-      },
-      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (300 + 700 + 0 + 1500 == 2500 GEN)"
+        "treaties": [
+          {
+            "id": 1,
+            "status": "PROPOSED",
+            "kind": "DATA_SHARING",
+            "bond_a": "700000000000000000000",
+            "bond_b": "0"
+          },
+          {
+            "id": 2,
+            "status": "SETTLED",
+            "kind": "DATA_SHARING",
+            "bond_a": "0",
+            "bond_b": "0"
+          }
+        ],
+        "enclaves": [
+          {
+            "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
+            "name": "Halcyon",
+            "archetype": "Autonomous Arbiter",
+            "status": "ACTIVE",
+            "reputation": "65",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+            "name": "Meridian",
+            "archetype": "Oracle Collective",
+            "status": "SANCTIONED",
+            "reputation": "0",
+            "collateral": "150000000000000000000"
+          }
+        ],
+        "required_dispute_bond": {
+          "halcyon": "425000000000000000000",
+          "meridian": "750000000000000000000"
+        },
+        "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (300 + 700 + 0 + 1500 == 2500 GEN)"
+      }
     }
   },
-  "state_note": "Used, not fresh: the autonomous agents founded Halcyon and Meridian here, proposed and settled treaties 1 and 2, and the contract holds 2500 GEN under the solvency identity above. `observed_at_deploy` records the empty state read immediately after deployment and is kept for comparison; `observed_at_current_head` is the live state. The rpc_url is the studio-dev hostname used at deploy time; studio-next.genlayer.com serves the same chain 61997 and answers identically.",
-  "supersedes": "The prior studio-dev instance, which is no longer referenced anywhere in the repository."
+  "state_note": "The live address is a fresh deployment of the same source: empty, with next_treaty_id 1 and zero balance, so the board reads ON-CHAIN / EMPTY until the autonomous agents run against it. The predecessor block records the retired instance the documented end-to-end run executed against - it is kept because that run's figures are quoted throughout README.md, and because the board's state mapping is validated against that populated capture. Both studio-next.genlayer.com and studio-dev.genlayer.com serve chain 61997 and answer identically; the repository standardises on studio-next, matching the hackathon brief.",
+  "supersedes": "The predecessor entry above, which this record now carries as history rather than as the live target."
 }

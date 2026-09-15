@@ -8,8 +8,9 @@ Web3 workflows against GenLayer Studio Net.
 
 | | |
 |---|---|
-| **Live contract** | [`0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`](https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3) |
+| **Live contract** | [`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-next.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00) |
 | **Network** | GenLayer Studio Net, chain 61997 |
+| **Predecessor** | [`0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`](https://explorer-studio-next.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3) - retired, still readable; the instance step 3's recorded run executed against |
 | **Demo video** | _TODO: link before final submission_ |
 | **Reviewer quickstart** | [Quickstart for reviewers](#quickstart-for-reviewers) |
 
@@ -239,8 +240,12 @@ state. Confirm it yourself:
 - The command bar reads **ON-CHAIN** next to the protocol name. If the contract
   were unreachable it would read **SIMULATED** instead, and the islands would be
   seed data.
-- The two islands are **Halcyon** and **Meridian** - the sovereignties the
-  autonomous agents actually founded on chain, not the seed archipelago.
+- The live contract is **freshly deployed and empty**, so on a first visit the
+  bar reads **ON-CHAIN / EMPTY**, the archipelago is bare and the badge shows a
+  zero total. That is a real read of a real contract, not a failure - step 3
+  populates it. Re-run this step afterwards and the two islands are **Halcyon**
+  and **Meridian**, the sovereignties the autonomous agents actually founded on
+  chain rather than the seed archipelago.
 - **TOTAL VALUE LOCKED** and the solvency badge are read live from
   `get_protocol_overview`, and they reconcile against the explorer
   (see step 3).
@@ -286,14 +291,22 @@ the dispute.
 ### Verify the deployment on the explorer
 
 Contract:
-[`0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`](https://explorer-studio-dev.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3)
-on GenLayer Studio Net (chain 61997).
+[`0xB78A41624fe09163fee3159091E907B7b7Af9D00`](https://explorer-studio-next.genlayer.com/address/0xB78A41624fe09163fee3159091E907B7b7Af9D00)
+on GenLayer Studio Net (chain 61997). Predecessor instance:
+[`0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`](https://explorer-studio-next.genlayer.com/address/0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3).
 
 GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live
 contract and cannot be used to compare deployed bytecode against source. The
 deployment is evidenced instead by live view reads: `get_protocol_overview`
 answers from that address and reports `solvent: true`, with the tracked
 component sums equalling `balance`.
+
+The live instance is **freshly deployed and empty** - `next_treaty_id` 1, zero
+balance, no enclaves. It is known to be the same source as the predecessor
+rather than a different revision because every pure-function binding answers
+identically: `sanitize_preview` on markup input, `is_safe_url` across public,
+loopback and non-HTTP forms, `whoami`, `required_dispute_bond`, `claimable_of`
+and `locked_treaty_count`. Run step 3 to populate it.
 
 ---
 
@@ -417,7 +430,7 @@ collateral-exit gate locked on open treaty bonds.
   Additionally, `drain_reserves` gives the deployer-keyed governor a
   treasury exit for accumulated reserves.
 - Deployment: live on GenLayer Studio Devnet at
-  `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3` (chain 61997), recorded in
+  `0xB78A41624fe09163fee3159091E907B7b7Af9D00` (chain 61997), recorded in
   `deployments/studio-dev.json`. GenVM is not an EVM chain, so `eth_getCode`
   returns `0x` even for a live contract and cannot be used to compare deployed
   bytecode against source; the deployment is evidenced instead by live view
@@ -433,7 +446,7 @@ The dApp targets **GenLayer StudioNet**:
 | Studio Net (dev)   | 61997    | https://studio-next.genlayer.com/api   |
 | Studio (fallback)  | 61999    | https://studio.genlayer.com/api        |
 
-Explorer: https://explorer-studio-dev.genlayer.com
+Explorer: https://explorer-studio-next.genlayer.com
 
 `studio-next.genlayer.com` and `studio-dev.genlayer.com` both serve chain 61997
 and answer identically. `NEXT_PUBLIC_GENLAYER_RPC_URL` selects between them; the
@@ -489,15 +502,18 @@ default is studio-next.
 - The WebGL board is code-split behind a `dynamic(..., { ssr: false })` import,
   keeping the initial payload light and avoiding server canvas rendering.
 - The board hydrates from
-  `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3` with no wallet connected. The
-  mapping is checked against a capture from that contract: the collateral it
-  derives sums to the contract's own `total_collateral` (300 GEN) and the locked
-  escrow sums to `locked_escrow` (700 GEN), with the settled treaty's released
-  bonds correctly excluded.
+  `0xB78A41624fe09163fee3159091E907B7b7Af9D00` with no wallet connected. The
+  mapping is checked against a capture from the predecessor instance, whose
+  state it reproduces exactly: the collateral it derives sums to that contract's
+  own `total_collateral` (300 GEN) and the locked escrow sums to `locked_escrow`
+  (700 GEN), with the settled treaty's released bonds correctly excluded. The
+  live instance holds none of that state yet, so it hydrates to an empty board
+  through the identical code path.
 - All UI labels, code, variables, and comments are pure ASCII English.
-- Live end-to-end run on Studio Devnet against
-  `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3`, with fresh identities and every
-  figure below read back from the chain afterwards. Run it with
+- Live end-to-end run on Studio Devnet against the predecessor instance
+  `0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3` (still live and readable), with
+  fresh identities and every figure below read back from the chain afterwards.
+  Run it with
   `.venv/bin/python -m agent.demo --fresh` (see `agent/README.md`).
   Two agents founded enclaves, negotiated a `DATA_SHARING` treaty across a
   rejected first proposal (700 GEN / 7d / 9500 / 800, refused with four
@@ -510,3 +526,7 @@ default is studio-next.
   post-run `get_protocol_overview` read `solvent: true` with
   `300 + 700 + 0 + 1500 == 2500 GEN` balance, so the accounting identity held
   across real native value movement rather than a simulated ledger.
+
+The live contract `0xB78A41624fe09163fee3159091E907B7b7Af9D00` is a fresh
+deployment of that same source. Running `.venv/bin/python -m agent.demo --fresh`
+against it reproduces the whole sequence above from zero state.
