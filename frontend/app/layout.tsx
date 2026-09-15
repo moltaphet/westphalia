@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+// The Transaction Kit panel's own stylesheet, scoped under `.gltk-root` so it
+// cannot leak into the HUD. Imported before globals.css so this app's token
+// overrides (see the `.gltk-root` block there) win on equal specificity.
+import "@genlayer/transaction-kit-react/styles.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

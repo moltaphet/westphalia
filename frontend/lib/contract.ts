@@ -1,4 +1,5 @@
 import type { NetworkConfig, TreatyKind } from "./types";
+import type { SubmitInput, TrackedStatus } from "@genlayer/transaction-kit";
 import {
   DEFAULT_NETWORK,
   DIPLOMATIC_CONTRACT_ADDRESS,
@@ -221,6 +222,35 @@ export interface TxReceipt {
   summary: string;
 }
 
+// One requested write, in the two shapes the Transaction Kit consumes.
+//
+// `value` is kept separate from `tx` on purpose. The kit takes the caller's
+// value at *estimate* time (as `PolicyInput.userValue`, from which it builds
+// the deposit) while `SubmitInput` carries only the call itself. Keeping that
+// asymmetry here means the ten call sites below never have to know about it.
+export interface WritePlan {
+  method: string;
+  summary: string;
+  value: bigint;
+  args: unknown[];
+  tx: SubmitInput;
+}
+
+// Thrown when a write is abandoned before signing -- the user closed the
+// approval panel. Deliberately distinct from a revert, because the pipeline
+// treats it as an intentional abort rather than a failure.
+export class WriteCancelled extends Error {
+  constructor() {
+    super("Transaction cancelled before signing.");
+    this.name = "WriteCancelled";
+  }
+}
+
+// Supplied by the store: shows the write's fee quote and verification badge,
+// gets a signature, submits, and tracks the transaction to a decided status.
+// The return value is what the contract records as the receipt hash.
+export type WriteAuthorizer = (plan: WritePlan) => Promise<TrackedStatus>;
+
 // Deterministic pseudo transaction hash for simulation / optimistic UI.
 function pseudoHash(seed: string): string {
   let h = 0x811c9dc5;
@@ -249,10 +279,17 @@ export class DiplomaticContract {
   readonly network: NetworkConfig;
   private client: unknown = null;
   private reader: unknown = null;
+  private authorizer: WriteAuthorizer | null = null;
 
   constructor(network: NetworkConfig = DEFAULT_NETWORK, address = DIPLOMATIC_CONTRACT_ADDRESS) {
     this.network = network;
     this.address = address;
+  }
+
+  // Route live writes through the approval panel. Set by the store, which owns
+  // the panel's state; left unset in contexts that only read.
+  setAuthorizer(authorizer: WriteAuthorizer): void {
+    this.authorizer = authorizer;
   }
 
   // Attempt to build a live GenLayer client bound to the injected wallet.
@@ -329,8 +366,10 @@ export class DiplomaticContract {
     return this.client !== null;
   }
 
-  // Write helpers. When no live client exists, these resolve to a
-  // simulated receipt so the reviewer-mode UI stays fully interactive.
+  // Write helpers. With no live signer -- reviewer mode, or a client that never
+  // connected -- these resolve to a simulated receipt so the UI stays fully
+  // interactive. With one, they hand the call to the authorizer, which runs it
+  // through the Transaction Kit.
   async foundSovereignty(
     name: string,
     archetype: string,
@@ -427,36 +466,31 @@ export class DiplomaticContract {
     { value, args }: { value: bigint; args: unknown[] }
   ): Promise<TxReceipt> {
     const seed = `${method}:${JSON.stringify(args)}:${Date.now()}`;
-    if (!this.connected) {
+    if (!this.connected || !this.authorizer) {
       return { hash: pseudoHash(seed), simulated: true, method, summary };
     }
-    // Live path. Failures are surfaced to the caller (the pipeline renders
-    // them as reverts) instead of being masked as simulated receipts.
-    const client = this.client as {
-      estimateTransactionFees?: (args: unknown) => Promise<unknown>;
-      writeContract?: (cfg: unknown) => Promise<{ hash?: string } | string>;
-    };
-    if (typeof client.writeContract !== "function") {
-      return { hash: pseudoHash(seed), simulated: true, method, summary };
-    }
-    // Fee injection. Studio Net has no fee-manager contract: the SDK derives
-    // the fee from the chain's live fee policy, but only when it is asked to.
-    // Omitting `fees` leaves feeValue at 0 and the consensus contract rejects
-    // the transaction with FeeValueMustBeNonZero(1). This estimate is what
-    // makes the fee nonzero.
-    let fees: unknown;
-    if (typeof client.estimateTransactionFees === "function") {
-      fees = await client.estimateTransactionFees({});
-    }
-    const res = await client.writeContract({
-      address: this.address,
-      abi: DIPLOMATIC_ABI,
-      functionName: method,
-      args,
+    // Live path. Everything fee-related -- the allocation, the deposit, the cap
+    // check, and the verification of the quoted fee policy against the chain's
+    // current one -- belongs to the Transaction Kit, which reads those prices
+    // live. This method's job ends at naming the call.
+    //
+    // A rejected approval throws (`WriteCancelled`); a revert propagates from
+    // submit/track. Neither is masked as a simulated receipt: the pipeline
+    // renders reverts and stays silent on an abort.
+    const status = await this.authorizer({
+      method,
+      summary,
       value,
-      fees,
+      args,
+      tx: {
+        kind: "write",
+        address: this.address as `0x${string}`,
+        method,
+        args,
+      },
     });
-    const hash = typeof res === "string" ? res : res.hash ?? pseudoHash(seed);
+    const hash =
+      status.genlayerTxId ?? status.evmTxHash ?? pseudoHash(seed);
     return { hash, simulated: false, method, summary };
   }
 

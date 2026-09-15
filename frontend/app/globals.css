@@ -159,3 +159,39 @@ body {
     transform: scaleX(1);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Transaction Kit panel theming.
+
+   The kit ships light-first with a dark variant behind [data-theme='dark'];
+   the panel applies that attribute itself when rendered with theme="dark".
+   These overrides retarget its tokens at the HUD palette so the approval
+   surface reads as part of the board rather than a foreign card. Only tokens
+   are redefined -- no structural selectors -- so a kit upgrade that adds
+   surface keeps working.
+   --------------------------------------------------------------------------- */
+.gltk-root[data-theme="dark"] {
+  --gltk-bg: #0f172a; /* panel / slate-900 */
+  --gltk-bg-raised: #131c30;
+  --gltk-bg-inset: #0b1120;
+  --gltk-ink: #e2e8f0; /* slate-200 */
+  --gltk-ink-dim: #94a3b8; /* slate-400 */
+  --gltk-ink-faint: #64748b; /* slate-500 */
+  --gltk-rule: #334155; /* slate-700 */
+  --gltk-accent: #22d3ee; /* allianceCyan */
+  --gltk-accent-hover: #67e8f9;
+  --gltk-btn-bg: #06b6d4;
+  --gltk-btn-bg-hover: #22d3ee;
+  --gltk-btn-ink: #04141a;
+  --gltk-success: #10b981; /* alliance */
+  --gltk-warn: #f59e0b; /* dispute */
+  --gltk-warn-raw: #fbbf24;
+  --gltk-danger: #ef4444; /* containment */
+  --gltk-shadow: 0 0 0 1px rgba(148, 163, 184, 0.15), 0 8px 40px rgba(0, 0, 0, 0.55);
+
+  /* The whole HUD is monospaced; the panel follows it. */
+  --gltk-font-display: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --gltk-font-body: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --gltk-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --gltk-radius: 8px;
+}

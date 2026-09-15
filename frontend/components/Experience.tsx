@@ -9,6 +9,7 @@ import IntroOverlay from "./IntroOverlay";
 import TopBar from "./TopBar";
 import GlobalFeedback from "./GlobalFeedback";
 import FoundRealmModal from "./FoundRealmModal";
+import TransactionGate from "./TransactionGate";
 import TopologyView from "./views/TopologyView";
 import TribunalView from "./views/TribunalView";
 import TreasuryView from "./views/TreasuryView";
@@ -46,7 +47,7 @@ export default function Experience() {
   // Suppress Drei Html scene labels whenever a modal/dialog is open so they
   // never bleed through the blurred backdrop. (Non-world views unmount the
   // board entirely, so labels are already gone there.)
-  const showLabels = !foundOpen && !hudOverlayOpen;
+  const showLabels = !foundOpen && !hudOverlayOpen && !s.txRequest;
 
   return (
     <>
@@ -131,6 +132,15 @@ export default function Experience() {
       />
       <GlobalFeedback pipeline={s.pipeline} lastReceipt={s.lastReceipt} />
       <IntroOverlay />
+
+      {/* Every live write parks here until it is signed or abandoned. Rendered
+          above the HUD (z-110) so the approval surface is never occluded. */}
+      <TransactionGate
+        request={s.txRequest}
+        network={s.network}
+        onDone={s.settleWrite}
+        onAbort={s.abortWrite}
+      />
 
       {foundOpen && (
         <FoundRealmModal

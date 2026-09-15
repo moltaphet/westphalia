@@ -17,7 +17,13 @@ import type {
 } from "./types";
 import { TREATIES, LEDGER } from "./mockData";
 import { DEFAULT_NETWORK } from "./networks";
-import { DiplomaticContract, type TxReceipt } from "./contract";
+import {
+  DiplomaticContract,
+  WriteCancelled,
+  type TxReceipt,
+  type WritePlan,
+} from "./contract";
+import type { TrackedStatus } from "@genlayer/transaction-kit";
 import { fetchChainSnapshot } from "./chainState";
 import { ARCHETYPE_PRESETS } from "./archetypes";
 
@@ -174,7 +180,55 @@ export function useWestphaliaStore() {
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
   const [chainOverview, setChainOverview] = useState<ChainOverview | null>(null);
 
+  // The write currently waiting for a signature, if any. Non-null exactly while
+  // the Transaction Kit's approval panel is on screen.
+  const [txRequest, setTxRequest] = useState<WritePlan | null>(null);
+  // The other half of that handshake: the promise the contract's write() is
+  // awaiting, resolved by the panel's outcome and rejected by an abort.
+  const pendingWrite = useRef<{
+    resolve: (status: TrackedStatus) => void;
+    reject: (err: unknown) => void;
+  } | null>(null);
+
   const contractRef = useRef<DiplomaticContract>(new DiplomaticContract(network));
+
+  // Supply a write to the approval panel and wait for what the user decides.
+  //
+  // Writes are triggered from all over the board -- the HUD, the treasury view,
+  // the found-realm modal -- so the gate is driven by this one piece of state
+  // rather than owned by any of those components. Every live write therefore
+  // passes through the same fee quote, fee-policy verification and signature.
+  const authorizeWrite = useCallback((plan: WritePlan) => {
+    return new Promise<TrackedStatus>((resolve, reject) => {
+      pendingWrite.current = { resolve, reject };
+      setTxRequest(plan);
+    });
+  }, []);
+
+  const settleWrite = useCallback((status: TrackedStatus) => {
+    setTxRequest(null);
+    const pending = pendingWrite.current;
+    pendingWrite.current = null;
+    pending?.resolve(status);
+  }, []);
+
+  const abortWrite = useCallback(() => {
+    setTxRequest(null);
+    const pending = pendingWrite.current;
+    pendingWrite.current = null;
+    pending?.reject(new WriteCancelled());
+  }, []);
+
+  // Every contract instance the store builds is wired to the gate before it is
+  // used, including the one rebuilt on a network change.
+  const bindContract = useCallback(
+    (contract: DiplomaticContract) => {
+      contract.setAuthorizer(authorizeWrite);
+      contractRef.current = contract;
+      return contract;
+    },
+    [authorizeWrite]
+  );
 
   const state: ProtocolState = useMemo(() => {
     const totalEscrowGen = enclaves.reduce((s, x) => s + x.lockedEscrowGen, 0);
@@ -236,14 +290,13 @@ export function useWestphaliaStore() {
   // chain it was originally opened against.
   useEffect(() => {
     const wasConnected = contractRef.current.connected;
-    const contract = new DiplomaticContract(network);
-    contractRef.current = contract;
+    const contract = bindContract(new DiplomaticContract(network));
     if (!wasConnected) return;
     void contract.connect().then((ok) => {
       setConnected(ok);
       setReviewerMode(!ok);
     });
-  }, [network, syncChain]);
+  }, [network, syncChain, bindContract]);
 
   // Transaction pipeline: the on-chain call runs FIRST (step 0, while the UI
   // shows "Signature Verified"); a revert aborts the animation and surfaces
@@ -254,6 +307,13 @@ export function useWestphaliaStore() {
       try {
         await finalize();
       } catch (err) {
+        // A dismissed approval panel is an abort, not a failure. Clearing the
+        // pipeline without a banner also stops the callback where it stands, so
+        // nothing downstream records state for a write that never happened.
+        if (err instanceof WriteCancelled) {
+          setPipeline(null);
+          return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         setPipeline({
           active: true,
@@ -291,8 +351,7 @@ export function useWestphaliaStore() {
   }, []);
 
   const connectWallet = useCallback(async () => {
-    const contract = new DiplomaticContract(network);
-    contractRef.current = contract;
+    const contract = bindContract(new DiplomaticContract(network));
     const ok = await contract.connect();
     setConnected(ok);
     setReviewerMode(!ok);
@@ -305,7 +364,7 @@ export function useWestphaliaStore() {
         ? `Wallet linked to ${network.label}.`
         : `No wallet detected. Reviewer simulation active on ${network.label}.`,
     });
-  }, [network, pushLedger, syncChain]);
+  }, [network, pushLedger, syncChain, bindContract]);
 
   const enterReviewerMode = useCallback(() => {
     setReviewerMode(true);
@@ -621,6 +680,7 @@ export function useWestphaliaStore() {
     lastReceipt,
     pipeline,
     chainOverview,
+    txRequest,
     setHoveredId,
     selectEnclave,
     focusEnclave,
@@ -628,6 +688,8 @@ export function useWestphaliaStore() {
     setNetwork,
     connectWallet,
     enterReviewerMode,
+    settleWrite,
+    abortWrite,
     proposeTreaty,
     ratifyTreaty,
     dissolveTreaty,
