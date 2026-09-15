@@ -46,6 +46,10 @@ by a GenLayer validator quorum -- rendered as an interactive 3D voxel war room.
 - [A. Deployment record](#a-deployment-record)
 - [B. Verification log](#b-verification-log)
 
+**License**
+
+- [MIT](#license)
+
 ---
 
 # Part I -- The Project
@@ -1259,3 +1263,15 @@ derives sums to the contract's own `total_collateral`, the locked escrow sums to
 which is exactly why `TOTAL VALUE LOCKED` read 700 GEN and not 1200 in that
 capture: the settled treaty's 500 GEN bond is no longer escrow the contract
 holds.
+
+---
+
+# License
+
+MIT -- see [`LICENSE`](LICENSE). Copyright (c) 2026 moltaphet.
+
+The contract, the agents and the board are all under the same terms, so any
+part of this repository can be reused without asking. Third-party dependencies
+keep their own licenses; `frontend/package-lock.json` records the license of
+each one beside it.
+
