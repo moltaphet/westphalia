@@ -9,7 +9,6 @@ import {
   Film,
   Gavel,
   Globe2,
-  Landmark,
   Network,
   Plus,
   Radio,
@@ -115,9 +114,13 @@ export default function TopBar({
       <div className="flex h-14 items-center justify-between px-6">
         {/* Left cluster: brand + live core beacon */}
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded bg-emerald-500/15 text-emerald-400">
-            <Landmark size={18} />
-          </div>
+          {/* The mark carries its own plate, so it is placed as-is: no tinted
+              backing, no padding, and no rounding to crop it against. It is an
+              <img> rather than inline SVG because the file defines gradient and
+              filter ids (wGlowGrad, heavyGlow, hexBracket); inlining would put
+              those in the document's global id space and collide with any
+              second copy. */}
+          <img src="/w.svg" alt="Westphalia" className="h-9 w-9 object-cover" />
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold tracking-[0.2em] text-slate-100">

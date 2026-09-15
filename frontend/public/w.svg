@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <!-- Core Cyber Gradient -->
+    <linearGradient id="wGlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00FFA3" />
+      <stop offset="45%" stop-color="#00E5FF" />
+      <stop offset="100%" stop-color="#0066FF" />
+    </linearGradient>
+
+    <!-- Deep Ambient Glow Filter -->
+    <filter id="heavyGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Corner Armor Plate Component -->
+    <g id="hexBracket">
+      <path d="M 178,48 L 200,35 L 222,48" 
+            fill="none" 
+            stroke="#00FFA3" 
+            stroke-width="5" 
+            stroke-linecap="round" 
+            stroke-linejoin="round" />
+    </g>
+  </defs>
+
+  <!-- Dark Atmospheric Core Plate -->
+  <polygon points="200,38 340,119 340,281 200,362 60,281 60,119" 
+           fill="#070C18" 
+           stroke="#16273F" 
+           stroke-width="3" 
+           stroke-linejoin="round" />
+
+  <!-- Outer Heavy Sovereign Hexagon (Thick Chamfered Boundary) -->
+  <polygon points="200,48 331,124 331,276 200,352 69,276 69,124" 
+           fill="none" 
+           stroke="url(#wGlowGrad)" 
+           stroke-width="12" 
+           stroke-linejoin="round"
+           stroke-linecap="round"
+           filter="url(#heavyGlow)" />
+
+  <!-- 6 Rotational Corner Brackets (Strict 60-deg Symmetry) -->
+  <use href="#hexBracket" />
+  <use href="#hexBracket" transform="rotate(60, 200, 200)" />
+  <use href="#hexBracket" transform="rotate(120, 200, 200)" />
+  <use href="#hexBracket" transform="rotate(180, 200, 200)" />
+  <use href="#hexBracket" transform="rotate(240, 200, 200)" />
+  <use href="#hexBracket" transform="rotate(300, 200, 200)" />
+
+  <!-- UPPER SOVEREIGN CHEVRON (The Treaty Crown) -->
+  <path d="M 125,120 L 200,75 L 275,120" 
+        fill="none" 
+        stroke="#00FFA3" 
+        stroke-width="14" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" />
+
+  <!-- MUTUAL ESCROW COVENANT LINE (Base Treaty Tie) -->
+  <line x1="145" y1="275" x2="255" y2="275" 
+        stroke="#0E355A" 
+        stroke-width="10" 
+        stroke-linecap="round" />
+  <line x1="170" y1="275" x2="230" y2="275" 
+        stroke="#00E5FF" 
+        stroke-width="6" 
+        stroke-linecap="round" />
+
+  <!-- CENTRAL "W" TREATY TOPOLOGY (The Westphalia Monogram) -->
+  <path d="M 105,145 L 148,275 L 200,195 L 252,275 L 295,145" 
+        fill="none" 
+        stroke="url(#wGlowGrad)" 
+        stroke-width="16" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"
+        filter="url(#heavyGlow)" />
+
+  <!-- TRIBUNAL NEXUS CONDUIT (Vertical Central Spine) -->
+  <line x1="200" y1="95" x2="200" y2="175" 
+        stroke="#00E5FF" 
+        stroke-width="6" 
+        stroke-dasharray="8 8" 
+        stroke-linecap="round" />
+
+  <!-- SOVEREIGN AGENT ENCLAVES (Key Interaction Nodes) -->
+  <!-- Left Agent Enclave -->
+  <circle cx="105" cy="145" r="14" fill="#070C18" stroke="#00FFA3" stroke-width="6" />
+  <circle cx="105" cy="145" r="5" fill="#00FFA3" />
+
+  <!-- Right Agent Enclave -->
+  <circle cx="295" cy="145" r="14" fill="#070C18" stroke="#0066FF" stroke-width="6" />
+  <circle cx="295" cy="145" r="5" fill="#00E5FF" />
+
+  <!-- Left Escrow Vault Anchor -->
+  <circle cx="148" cy="275" r="12" fill="#070C18" stroke="#00FFA3" stroke-width="5" />
+  <circle cx="148" cy="275" r="4" fill="#FFFFFF" />
+
+  <!-- Right Escrow Vault Anchor -->
+  <circle cx="252" cy="275" r="12" fill="#070C18" stroke="#0066FF" stroke-width="5" />
+  <circle cx="252" cy="275" r="4" fill="#FFFFFF" />
+
+  <!-- CENTRAL AI CONSENSUS CORE (The Tribunal Eye) -->
+  <polygon points="200,172 218,195 200,218 182,195" 
+           fill="#070C18" 
+           stroke="#00FFA3" 
+           stroke-width="6" 
+           stroke-linejoin="round" />
+  <circle cx="200" cy="195" r="5" fill="#FFFFFF" />
+</svg>
