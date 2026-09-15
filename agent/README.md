@@ -15,6 +15,8 @@ agent/
   agent.py      the observe -> decide -> act loop + CLI
   demo.py       two-agent duet: founding -> proposal -> rejection -> adaptation ->
                 ratification -> adjudication
+  seed.py       the wider roster: four more identities plus the treaties that
+                connect them (the board only sees enclaves that hold one)
   test_decider.py    unit tests for the heuristic (no chain, no I/O)
   test_telemetry.py  unit tests for the feeds (no chain, no I/O)
 ```
@@ -39,6 +41,10 @@ agent/
 
 # reason without submitting anything
 .venv/bin/python -m agent.agent --profile alice --once --dry-run
+
+# widen the archipelago: found the four-identity roster and wire their treaties
+.venv/bin/python -m agent.seed --dry-run
+.venv/bin/python -m agent.seed
 
 # unit-test the decision engine and the telemetry feeds
 .venv/bin/python -m pytest agent/test_decider.py agent/test_telemetry.py -q
@@ -170,6 +176,43 @@ bond 700 GEN, 7 days), which violates four of Bob's constraints at once -- so
 Bob rejects it with an enumerated rationale. Alice then tightens to uptime
 9950, latency 300, bond 500 GEN, 63 days, which Bob accepts and ratifies.
 That reject-then-accept script is locked by `test_decider.py`.
+
+## The wider roster
+
+`agent.seed` founds four more identities and wires the treaties that hold them
+together. Two agents are enough to narrate the protocol; they are not enough to
+show it, because the archipelago never leaves its inner ring and a topology is
+indistinguishable from a line.
+
+| key | name | archetype | posture | accepts |
+|---|---|---|---|---|
+| `vantage` | Vantage | Liquidity Nexus | proactive | TRADE_CORRIDOR, DATA_SHARING |
+| `aegis` | Aegis | Defense Vanguard | reactive | NON_AGGRESSION |
+| `quorum` | Quorum | Oracle Collective | proactive | DATA_SHARING |
+| `solstice` | Solstice | Autonomous Arbiter | proactive | all three kinds |
+
+Each is a full `Profile`, so every one of them can also be driven by the
+autonomous loop: `.venv/bin/python -m agent.agent --profile quorum`.
+
+`seed.py` wires a star centred on Halcyon plus a three-link mesh inside the
+ring, so no new identity is only ever a leaf. Every offer's parameters are
+narrowed to the counterparty's own declared band -- the contract does not check
+that, but a seeded proposal outside the band is one the counterparty's charter
+obliges it to refuse, and storing one would make the on-chain record read as a
+fabrication rather than a history.
+
+**Why founding alone is not enough.** The contract has no enclave enumerator:
+it answers `get_enclave(address)` and nothing lists addresses, so the frontend
+derives the enclave set transitively by walking the treaties and collecting
+both parties. An enclave that has never been party to a treaty is real
+on-chain and invisible on the board. `seed.py` therefore proposes a treaty for
+each identity rather than only founding it, and ratifies by default so the
+pacts read as live agreements and their bonds land in the escrow the board
+counts. `--no-ratify` gives a cheaper run that only needs the islands drawn.
+
+Every step re-reads chain state before it acts, so the script is idempotent and
+resumable: a run interrupted after six of eighteen transactions picks up at the
+seventh, and nothing is ever submitted twice.
 
 ## On-chain interface used
 

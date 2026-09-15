@@ -104,4 +104,140 @@ BOB = Profile(
     ),
 )
 
-PROFILES = {"alice": ALICE, "bob": BOB}
+# The four below are the wider roster. Alice and Bob carry the duet -- the
+# propose / reject / adapt / ratify / arbitrate arc that the demo narrates --
+# and these fill the archipelago around them so the protocol is exercised at a
+# size where its layout, escrow maths and topology are visible at all. Each is
+# a distinct archetype and a distinct risk posture, so a treaty offer means
+# something different depending on who is reading it.
+
+# Vantage -- a Liquidity Nexus. Trades settlement corridors; prices slippage.
+VANTAGE = Profile(
+    name="Vantage",
+    archetype="Liquidity Nexus",
+    charter=(
+        "Open TRADE_CORRIDOR pacts where settlement volume is real and "
+        "slippage stays inside 300 bps. Mirror the corridor with a "
+        "DATA_SHARING feed so the volumes are checkable, not merely asserted."
+    ),
+    accepted_kinds=("TRADE_CORRIDOR", "DATA_SHARING"),
+    proactive=True,
+    bond_target=300 * GEN,
+    bond_max=800 * GEN,
+    expiry_min_s=days(10),
+    expiry_max_s=days(90),
+    rep_floor=35,
+    param_limits={
+        "TRADE_CORRIDOR": {
+            "min_settlement_volume": (1000, 100000),
+            "max_slippage_bps": (0, 300),
+        },
+        "DATA_SHARING": {"min_uptime_bps": (9000, 10000), "max_latency_bps": (0, 1000)},
+    },
+    trusted_oracle_hosts=(
+        "httpbin.org",
+        "api.binance.com",
+        "api.coingecko.com",
+        "data.binance.vision",
+    ),
+)
+
+# Aegis -- a Defense Vanguard. Reactive by posture: it answers offers, it does
+# not court them, because a deterrent that shops for fights is not a deterrent.
+AEGIS = Profile(
+    name="Aegis",
+    archetype="Defense Vanguard",
+    charter=(
+        "Deter, do not trade. Accept NON_AGGRESSION only where the exploit "
+        "ceiling is under 200 bps and MEV exposure under five events, and "
+        "refuse any counterparty whose reputation has not held at 45."
+    ),
+    accepted_kinds=("NON_AGGRESSION",),
+    proactive=False,
+    bond_target=400 * GEN,
+    bond_max=1000 * GEN,
+    expiry_min_s=days(21),
+    expiry_max_s=days(180),
+    rep_floor=45,
+    param_limits={
+        "NON_AGGRESSION": {"max_exploit_bps": (0, 200), "max_mev_events": (0, 5)},
+    },
+    trusted_oracle_hosts=(
+        "httpbin.org",
+        "api.binance.com",
+        "api.coingecko.com",
+        "data.binance.vision",
+    ),
+)
+
+# Quorum -- an Oracle Collective that sells uptime rather than buying it, so its
+# posture is the opposite of Meridian's: it courts counterparties and holds
+# them to the strictest latency band in the roster.
+QUORUM = Profile(
+    name="Quorum",
+    archetype="Oracle Collective",
+    charter=(
+        "Sell verifiable uptime. Offer DATA_SHARING at 9700 bps and sub-600 bps "
+        "latency, and hold every counterparty to the same band I am judged "
+        "against -- the feed that convicts them is the feed that convicts me."
+    ),
+    accepted_kinds=("DATA_SHARING",),
+    proactive=True,
+    bond_target=300 * GEN,
+    bond_max=700 * GEN,
+    expiry_min_s=days(14),
+    expiry_max_s=days(120),
+    rep_floor=40,
+    param_limits={
+        "DATA_SHARING": {"min_uptime_bps": (9700, 10000), "max_latency_bps": (0, 600)},
+    },
+    trusted_oracle_hosts=(
+        "httpbin.org",
+        "api.binance.com",
+        "api.coingecko.com",
+        "data.binance.vision",
+    ),
+)
+
+# Solstice -- an Autonomous Arbiter with the widest mandate in the roster: it
+# will hold any of the three kinds, which makes it the natural second hub once
+# the archipelago outgrows a single star.
+SOLSTICE = Profile(
+    name="Solstice",
+    archetype="Autonomous Arbiter",
+    charter=(
+        "Bind the archipelago together: hold any of the three kinds where the "
+        "parameters are honest, and prefer a well-fed counterparty to a "
+        "well-funded one. Every escrow stays inside my collateral reach."
+    ),
+    accepted_kinds=("NON_AGGRESSION", "DATA_SHARING", "TRADE_CORRIDOR"),
+    proactive=True,
+    bond_target=300 * GEN,
+    bond_max=900 * GEN,
+    expiry_min_s=days(7),
+    expiry_max_s=days(120),
+    rep_floor=40,
+    param_limits={
+        "NON_AGGRESSION": {"max_exploit_bps": (0, 400), "max_mev_events": (0, 8)},
+        "DATA_SHARING": {"min_uptime_bps": (9500, 10000), "max_latency_bps": (0, 800)},
+        "TRADE_CORRIDOR": {
+            "min_settlement_volume": (1000, 100000),
+            "max_slippage_bps": (0, 500),
+        },
+    },
+    trusted_oracle_hosts=(
+        "httpbin.org",
+        "api.binance.com",
+        "api.coingecko.com",
+        "data.binance.vision",
+    ),
+)
+
+PROFILES = {
+    "alice": ALICE,
+    "bob": BOB,
+    "vantage": VANTAGE,
+    "aegis": AEGIS,
+    "quorum": QUORUM,
+    "solstice": SOLSTICE,
+}
