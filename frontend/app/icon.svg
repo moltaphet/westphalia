@@ -1,7 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#09090b"/>
-  <path d="M16 5 L24 9 V17 C24 22.5 20.5 25.5 16 27 C11.5 25.5 8 22.5 8 17 V9 Z"
-        fill="none" stroke="#10b981" stroke-width="2"/>
-  <circle cx="16" cy="15" r="3" fill="#10b981"/>
-  <path d="M16 18 V21" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+  <!-- Favicon form of public/w.svg. The full mark has glow filters, six corner
+       brackets, a treaty crown, an escrow tie and four node circles; at 16px in
+       a tab strip all of it collapses into noise, so this keeps the two shapes
+       that carry the identity and drops the rest. The plate's own silhouette is
+       the sovereign hexagon, which is why there is no separate hexagon outline
+       here: an outline inside a plate this size only muddies both. What remains
+       is one large dark shape and one large bright shape, which is what survives
+       a downscale. The W is the brand mark's monogram scaled up by 1.15 about
+       its centre and drawn at the heavier weight the smaller canvas needs. -->
+  <defs>
+    <linearGradient id="wIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00FFA3" />
+      <stop offset="45%" stop-color="#00E5FF" />
+      <stop offset="100%" stop-color="#0066FF" />
+    </linearGradient>
+  </defs>
+  <polygon points="16,2.1 28,9.1 28,22.9 16,29.9 4,22.9 4,9.1"
+           fill="#070C18"
+           stroke="#16273F"
+           stroke-width="1"
+           stroke-linejoin="round" />
+  <path d="M 6.7,10.6 L 10.9,23.4 L 16,15.5 L 21.1,23.4 L 25.3,10.6"
+        fill="none"
+        stroke="url(#wIconGrad)"
+        stroke-width="3"
+        stroke-linecap="round"
+        stroke-linejoin="round" />
 </svg>

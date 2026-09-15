@@ -7,7 +7,12 @@ import { fbm } from "./noise";
 // orbital algorithm around the central Geneva core.
 
 export const TILE = 1;
-export const WORLD_EXTENT = 54; // outer bound, sizes radar + camera limits
+// Nominal radius of the archipelago: ring 3's outermost reach (radius 46 plus
+// the 2 units of radial jitter) plus an island's own radius at that ring (4).
+// Nothing reads this today -- the camera's limits are set independently in
+// DiplomaticBoard (minDistance 16, maxDistance 95) -- so it documents the
+// layout's extent rather than enforcing a bound on anything.
+export const WORLD_EXTENT = 54;
 
 // The neutral Geneva hub at the center of the archipelago.
 export const HUB = { center: [0, 0] as [number, number], floatY: 1.4, radius: 4 };
@@ -33,7 +38,18 @@ export interface OrbitSlot {
 // Concentric ring placement:
 //   Ring 1 (radius 18-24): enclaves 1-4
 //   Ring 2 (radius 30-36): enclaves 5-10
-//   Ring 3 (radius 42-50): enclaves 11+
+//   Ring 3 (radius 42-50): enclaves 11-18
+//
+// The table stops at ring 3, so the eighteenth enclave (index 17) is the last
+// distinct slot: from the nineteenth (index 18) the angle wraps back onto ring
+// 3's first slot and two islands stand in the same place. That ceiling is
+// deliberate rather than an oversight in the arithmetic. Ring 3 already sits at
+// 46 of the world's 54 nominal radius, and TopologyView projects every slot
+// through a scale fixed to the same layout, so a fourth ring would leave the
+// world and that projection at once -- and both are things the current island
+// count gives no way to check visually. This protocol's roster is six
+// identities, so nothing reaches the ceiling; a roster that outgrew it would
+// need the ring table and the projection widened together.
 export function orbitSlot(index: number): OrbitSlot {
   let ring: number;
   let capacity: number;
