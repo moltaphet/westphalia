@@ -46,16 +46,24 @@ def test_dual_telemetry_agreement(direct_vm, direct_deploy, direct_alice, direct
     assert c.get_enclave(khex(c, direct_vm, direct_bob))["status"] == "SANCTIONED"
 
 
-# --- V2.2: dual-feed divergence > 5% -> MALICIOUS_REPORT, plaintiff slashed --
-def test_dual_telemetry_divergence_slashes(direct_vm, direct_deploy, direct_alice, direct_bob):
+# --- V2.2: dual-feed divergence > 5% -> NEUTRAL feed conflict (Bug 2) --------
+def test_dual_telemetry_divergence_neutral_refund(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """Bug 2 hardening: when the two treaty-bound feeds diverge past the
+    tolerance the round is a NEUTRAL feed conflict, not a plaintiff-slashing
+    MALICIOUS_REPORT. A malicious defendant who controls one feed can no longer
+    force a contradiction to punish an honest disputant. The dispute bond is
+    refunded in full (zero fee, zero reputation penalty) and the treaty stays
+    ACTIVE."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
 
     ov0 = c.get_protocol_overview()
     reserves0 = int(ov0["reserves"])
+    alice = khex(c, direct_vm, direct_alice)
+    rep0 = int(c.get_enclave(alice)["reputation"])
 
-    # Feeds diverge by 70% (9000 vs 2000 bps) -> contract flags contradiction
-    # deterministically and forces MALICIOUS_REPORT regardless of the LLM.
+    # Feeds diverge by 70% (9000 vs 2000 bps) -> contract flags a contradiction
+    # deterministically and settles the dispute neutrally regardless of the LLM.
     direct_vm.mock_web(r".*primary.*", telemetry(0.9))
     direct_vm.mock_web(r".*secondary.*", telemetry(0.2))
     mock_verdict(direct_vm, "CRITICAL_BREACH")
@@ -65,10 +73,14 @@ def test_dual_telemetry_divergence_slashes(direct_vm, direct_deploy, direct_alic
     verdict = c.trigger_dispute(tid, "fabricated breach", "ipfs://e", "hdd1")
     direct_vm.value = 0
 
-    assert verdict == "MALICIOUS_REPORT"
+    assert verdict == "FEED_CONFLICT"
     ov1 = c.get_protocol_overview()
-    assert int(ov1["reserves"]) == reserves0 + MIN_DISPUTE  # 100% dispute bond slashed
-    assert c.claimable_of(khex(c, direct_vm, direct_alice)) == "0"
+    # No fee taken, so reserves are unchanged; the full dispute bond is refunded.
+    assert int(ov1["reserves"]) == reserves0
+    assert int(c.claimable_of(alice)) == MIN_DISPUTE
+    # No reputation penalty, and the treaty is left ACTIVE (standing preserved).
+    assert int(c.get_enclave(alice)["reputation"]) == rep0
+    assert c.get_treaty(tid)["status"] == "ACTIVE"
 
 
 # --- V2.3: amicable mutual dissolution -> full refund, no penalty -----------

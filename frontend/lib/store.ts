@@ -808,7 +808,9 @@ export function useWestphaliaStore() {
         const partner = enclaves.find((e) => e.id === partnerId);
         // Oracle feeds are treaty-bound on-chain (V3): the proposer picks the
         // telemetry sources, the counterparty inspects them before ratifying.
-        const oracle = `https://telemetry.westphalia.example/${partnerId}/metrics`;
+        // The contract now requires two feeds on INDEPENDENT hosts (a single
+        // host is a single point of manipulation), so the two sources use
+        // distinct hostnames rather than two paths on one host.
         const receipt = await contractRef.current.proposeTreaty(
           {
             counterpartyHex: partner?.address ?? partnerId,
@@ -816,9 +818,10 @@ export function useWestphaliaStore() {
             terms,
             // 90-day bounded expiry (the contract rejects 0 / unbounded).
             expiresAt: BigInt(Math.floor(Date.now() / 1000) + 90 * 86400),
-            oraclePrimary: oracle,
-            // Independent second feed so adjudication has a cross-check.
-            oracleSecondary: `https://telemetry.westphalia.example/${partnerId}/metrics?feed=b`,
+            oraclePrimary: `https://telemetry-a.westphalia.example/${partnerId}/metrics`,
+            // Independent second feed (distinct host) so adjudication has a
+            // genuine cross-check, not two views of the same source.
+            oracleSecondary: `https://telemetry-b.westphalia.example/${partnerId}/metrics`,
           },
           bondGen
         );

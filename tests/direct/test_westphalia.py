@@ -67,17 +67,24 @@ def test_unauthorized_and_unratified(direct_vm, direct_deploy, direct_alice, dir
     direct_vm.value = 0
 
 
-# --- Case 3: Griefing / contradictory telemetry -> MALICIOUS_REPORT ---------
+# --- Case 3: Frivolous report on clean telemetry -> MALICIOUS_REPORT --------
 def test_malicious_report_slashes_bond(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """A MALICIOUS_REPORT finding is only credible when the telemetry does NOT
+    corroborate a breach (Bug 1 clamp keeps MALICIOUS_REPORT in the allowed set
+    only while bps < BPS_ELEVATED). Here the feeds agree on a clean, in-range
+    metric and the model judges the allegation frivolous -> the plaintiff's
+    entire dispute bond is slashed into reserves. (Feed CONTRADICTION is now a
+    neutral conflict, not a malicious report -- see the Bug 2 divergence test.)"""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
 
     ov0 = c.get_protocol_overview()
     reserves0 = int(ov0["reserves"])
 
-    # Telemetry contradicts the allegation -> code forces MALICIOUS_REPORT.
-    mock_telemetry(direct_vm, 0.9, contradiction=True)
-    mock_verdict(direct_vm, "CRITICAL_BREACH")  # even if LLM says breach, code overrides
+    # Clean, agreeing telemetry (1000 bps, NORMAL range); the model returns a
+    # MALICIOUS_REPORT and the clamp allows it because bps < BPS_ELEVATED.
+    mock_telemetry(direct_vm, 0.1)
+    mock_verdict(direct_vm, "MALICIOUS_REPORT")
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE

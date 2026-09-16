@@ -70,7 +70,8 @@ ALICE = Profile(
         "NON_AGGRESSION": {"max_exploit_bps": (0, 500), "max_mev_events": (0, 10)},
     },
     trusted_oracle_hosts=(
-        "httpbin.org",
+        "telemetry-primary.westphalia.io",
+        "telemetry-secondary.westphalia.io",
         "api.binance.com",
         "api.coingecko.com",
         "data.binance.vision",
@@ -97,7 +98,8 @@ BOB = Profile(
         "DATA_SHARING": {"min_uptime_bps": (9900, 10000), "max_latency_bps": (0, 500)},
     },
     trusted_oracle_hosts=(
-        "httpbin.org",
+        "telemetry-primary.westphalia.io",
+        "telemetry-secondary.westphalia.io",
         "api.binance.com",
         "api.coingecko.com",
         "data.binance.vision",
@@ -135,7 +137,8 @@ VANTAGE = Profile(
         "DATA_SHARING": {"min_uptime_bps": (9000, 10000), "max_latency_bps": (0, 1000)},
     },
     trusted_oracle_hosts=(
-        "httpbin.org",
+        "telemetry-primary.westphalia.io",
+        "telemetry-secondary.westphalia.io",
         "api.binance.com",
         "api.coingecko.com",
         "data.binance.vision",
@@ -163,7 +166,8 @@ AEGIS = Profile(
         "NON_AGGRESSION": {"max_exploit_bps": (0, 200), "max_mev_events": (0, 5)},
     },
     trusted_oracle_hosts=(
-        "httpbin.org",
+        "telemetry-primary.westphalia.io",
+        "telemetry-secondary.westphalia.io",
         "api.binance.com",
         "api.coingecko.com",
         "data.binance.vision",
@@ -192,7 +196,8 @@ QUORUM = Profile(
         "DATA_SHARING": {"min_uptime_bps": (9700, 10000), "max_latency_bps": (0, 600)},
     },
     trusted_oracle_hosts=(
-        "httpbin.org",
+        "telemetry-primary.westphalia.io",
+        "telemetry-secondary.westphalia.io",
         "api.binance.com",
         "api.coingecko.com",
         "data.binance.vision",
@@ -226,7 +231,8 @@ SOLSTICE = Profile(
         },
     },
     trusted_oracle_hosts=(
-        "httpbin.org",
+        "telemetry-primary.westphalia.io",
+        "telemetry-secondary.westphalia.io",
         "api.binance.com",
         "api.coingecko.com",
         "data.binance.vision",

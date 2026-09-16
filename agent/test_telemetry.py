@@ -16,7 +16,8 @@ from agent.telemetry import (
     BREACH_FEEDS,
     CALM_FEEDS,
     DIVERGENCE_BPS,
-    FEED_HOST,
+    PRIMARY_HOST,
+    SECONDARY_HOST,
     agreed_bps,
     bps_of,
     feed_url,
@@ -32,21 +33,24 @@ PEER = {"name": "Halcyon", "archetype": "Autonomous Arbiter", "reputation": "50"
 
 
 def test_feed_is_byte_identical_for_every_fetcher():
-    url = feed_url(0.80)
-    assert feed_url(0.80) == url, "the same metric must produce the same URL"
+    url = feed_url(PRIMARY_HOST, 0.0, 0.80)
+    assert feed_url(PRIMARY_HOST, 0.0, 0.80) == url, "same metrics -> same URL"
     body = base64.b64decode(url.rsplit("/", 1)[-1])
-    assert json.loads(body) == {"breach_metric": 0.80}
+    assert json.loads(body) == {"party_a": 0.0, "party_b": 0.80}
 
 
-def test_feed_host_is_the_trusted_one():
-    assert BREACH_FEEDS[0].startswith(f"https://{FEED_HOST}/")
-    assert FEED_HOST in ALICE.trusted_oracle_hosts
-    assert FEED_HOST in BOB.trusted_oracle_hosts
+def test_feeds_are_on_independent_trusted_hosts():
+    assert BREACH_FEEDS[0].startswith(f"https://{PRIMARY_HOST}/")
+    assert BREACH_FEEDS[1].startswith(f"https://{SECONDARY_HOST}/")
+    assert PRIMARY_HOST != SECONDARY_HOST
+    for host in (PRIMARY_HOST, SECONDARY_HOST):
+        assert host in ALICE.trusted_oracle_hosts
+        assert host in BOB.trusted_oracle_hosts
 
 
 def test_breach_feeds_agree_within_the_divergence_budget():
-    """A pair that disagreed would be forced to MALICIOUS_REPORT by the
-    contract, so the demo's feeds must stay inside DIVERGENCE_BPS."""
+    """A pair that diverged would settle as a neutral FEED_CONFLICT, so the
+    demo's feeds must stay inside DIVERGENCE_BPS on the defendant's metric."""
     first, second = (bps_of(m) for m in (0.80, 0.78))
     assert abs(first - second) <= DIVERGENCE_BPS
 

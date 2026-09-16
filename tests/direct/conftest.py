@@ -57,13 +57,30 @@ def khex(contract, direct_vm, who) -> str:
 
 
 def telemetry(breach_metric: float, contradiction: bool = False) -> dict:
-    """A pinned successful telemetry web response."""
-    body = json.dumps({"breach_metric": breach_metric, "contradiction": contradiction})
+    """A pinned successful telemetry web response, party-attributed. The same
+    metric is reported for BOTH parties so a single value applies to whichever
+    party is the defendant -- backward-compatible with the old single-metric
+    feeds while exercising the party-keyed extraction path."""
+    body = json.dumps(
+        {"party_a": breach_metric, "party_b": breach_metric, "contradiction": contradiction}
+    )
+    return {"status": 200, "body": body}
+
+
+def party_telemetry(party_a: float, party_b: float, contradiction: bool = False) -> dict:
+    """A party-attributed telemetry response with DISTINCT per-party metrics, so
+    a dispute reads only the defendant's own breach (kills the race to
+    courthouse)."""
+    body = json.dumps({"party_a": party_a, "party_b": party_b, "contradiction": contradiction})
     return {"status": 200, "body": body}
 
 
 def mock_telemetry(direct_vm, breach_metric: float, contradiction: bool = False):
     direct_vm.mock_web(r".*", telemetry(breach_metric, contradiction))
+
+
+def mock_party_telemetry(direct_vm, party_a: float, party_b: float, contradiction: bool = False):
+    direct_vm.mock_web(r".*", party_telemetry(party_a, party_b, contradiction))
 
 
 def mock_verdict(direct_vm, tier: str):
@@ -91,8 +108,11 @@ def found(contract, direct_vm, who, name, archetype="Autonomous Arbiter", charte
 
 # Treaty-bound telemetry oracles (V3). The URLs are agreed at proposal time
 # and stored on the treaty; dispute-time adjudication reads them from storage.
-ORACLE_P = "https://telemetry.example/primary"
-ORACLE_S = "https://telemetry.example/secondary"
+# The two feeds live on INDEPENDENT hosts (the contract requires distinct
+# hostnames, not just distinct URLs). The host substrings "primary"/"secondary"
+# keep the `.*primary.*` / `.*secondary.*` web mocks matching per-feed.
+ORACLE_P = "https://telemetry-primary.westphalia.io/metrics"
+ORACLE_S = "https://telemetry-secondary.westphalia.io/metrics"
 
 
 def propose(contract, direct_vm, proposer, counterparty_hex, kind, terms, expires_at, params_json,
