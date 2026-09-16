@@ -89,6 +89,31 @@ function asAtto(v: unknown): bigint {
   }
 }
 
+// Whether the protocol's reserves cover its tracked obligations.
+//
+// get_protocol_overview already answers this on-chain (balance == collateral +
+// escrow + reserves + claimable), but the JSON boolean it returns cannot be
+// trusted through a bare Boolean() cast: a "false" string is truthy, an
+// undefined (pre-hydration) field is falsy, and either one silently misreports
+// the header badge -- the latter as a phantom DEFICIT. So the flag is honored
+// only when it is an unambiguous true, and every other case falls back to the
+// contract's own comparison recomputed here in BigInt (exact, never rounded)
+// and lenient (>=), so a reserve surplus over obligations is never mislabeled a
+// deficit. A DEFICIT is reported only on a genuine shortfall.
+function isSolvent(overview: Record<string, unknown>): boolean {
+  const flag = overview.solvent;
+  if (flag === true) return true;
+  if (typeof flag === "string" && flag.trim().toLowerCase() === "true") return true;
+  if (typeof flag === "number" && flag === 1) return true;
+  const balance = asAtto(overview.balance);
+  const tracked =
+    asAtto(overview.total_collateral) +
+    asAtto(overview.locked_escrow) +
+    asAtto(overview.reserves) +
+    asAtto(overview.total_claimable);
+  return balance >= tracked;
+}
+
 // A record read from the chain, or null when the id does not exist. A failed
 // read is indistinguishable from a missing record at this layer; the caller
 // treats both as "not on chain", which is the safe direction -- it can never
@@ -144,7 +169,7 @@ export function mapRecords(raw: RawRecords): ChainSnapshot {
     reserves: asString(raw.overview.reserves, "0"),
     totalClaimable: asString(raw.overview.total_claimable, "0"),
     nextTreatyId: String(Number(asString(raw.overview.next_treaty_id, "1")) || 1),
-    solvent: Boolean(raw.overview.solvent),
+    solvent: isSolvent(raw.overview),
   };
 
   // --- enclaves -----------------------------------------------------------

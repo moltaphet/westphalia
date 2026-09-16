@@ -211,10 +211,17 @@ export default function TopBar({
               <div className="flex flex-col gap-1">
                 <div className="text-[9px] tracking-widest text-slate-400">SOLVENCY</div>
                 <div
-                  className={`text-[13px] font-bold tabular-nums ${
-                    chainOverview.solvent ? "text-emerald-300" : "text-red-300"
+                  className={`flex w-fit items-center gap-1.5 rounded border px-2 py-0.5 text-[11px] font-bold tracking-widest tabular-nums ${
+                    chainOverview.solvent
+                      ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-300"
+                      : "border-red-500/40 bg-red-950/30 text-red-300"
                   }`}
                 >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      chainOverview.solvent ? "bg-emerald-400" : "bg-red-400"
+                    }`}
+                  />
                   {chainOverview.solvent ? "OK" : "DEFICIT"}
                 </div>
               </div>
