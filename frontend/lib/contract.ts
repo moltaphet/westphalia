@@ -329,7 +329,12 @@ export class DiplomaticContract {
   // Returns false in read-only (reviewer) mode when no injected wallet or SDK
   // is available. Reads do not go through this client -- see readClient() --
   // so a visitor without a wallet still sees live protocol state.
-  async connect(): Promise<boolean> {
+  //
+  // `preAuthorized` is an address the caller has already obtained (the store
+  // runs its own eth_requestAccounts / eth_accounts as part of the wallet
+  // lifecycle). Passing it in binds the signer without opening the wallet a
+  // second time; a bare connect() still prompts.
+  async connect(preAuthorized?: string): Promise<boolean> {
     if (typeof window === "undefined") return false;
     try {
       const sdk = (await import("genlayer-js").catch(() => null)) as
@@ -344,10 +349,13 @@ export class DiplomaticContract {
         sdk.chains as Record<string, GenLayerChain> | undefined
       );
       if (!chain) return false;
-      const accounts = (await injected.request({
-        method: "eth_requestAccounts",
-      })) as string[] | undefined;
-      const account = accounts?.[0];
+      let account = preAuthorized;
+      if (!account) {
+        const accounts = (await injected.request({
+          method: "eth_requestAccounts",
+        })) as string[] | undefined;
+        account = accounts?.[0];
+      }
       if (!account) return false;
       this.client = factory({
         chain,

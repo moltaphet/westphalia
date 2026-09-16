@@ -14,7 +14,6 @@ import {
   Radio,
   Share2,
   Users,
-  Wallet,
 } from "lucide-react";
 import type {
   AppView,
@@ -25,6 +24,8 @@ import type {
 } from "@/lib/types";
 import { attoToGen } from "@/lib/contract";
 import { NETWORKS } from "@/lib/networks";
+import type { WalletBundle } from "@/lib/store";
+import WalletConnect from "./WalletConnect";
 
 function Divider() {
   return <span className="h-5 w-px bg-zinc-800" />;
@@ -75,11 +76,12 @@ export default function TopBar({
   connected,
   reviewerMode,
   stateSource,
+  isSyncing,
   chainOverview,
   view,
   onView,
   onSetNetwork,
-  onConnect,
+  wallet,
   onEnterReviewer,
   onFound,
   cinematic,
@@ -90,11 +92,12 @@ export default function TopBar({
   connected: boolean;
   reviewerMode: boolean;
   stateSource: StateSource;
+  isSyncing: boolean;
   chainOverview: ChainOverview | null;
   view: AppView;
   onView: (v: AppView) => void;
   onSetNetwork: (n: NetworkConfig) => void;
-  onConnect: () => void;
+  wallet: WalletBundle;
   onEnterReviewer: () => void;
   onFound: () => void;
   cinematic: boolean;
@@ -161,6 +164,18 @@ export default function TopBar({
                       ? "READING CHAIN"
                       : "SIMULATED"}
               </span>
+              {/* Subtle, non-blocking sync indicator: shown while a background
+                  refresh is in flight over the (cached or empty) board. Never an
+                  opaque backdrop -- the board stays fully interactive. */}
+              {isSyncing && (
+                <span
+                  title="Refreshing protocol state from the deployed contract."
+                  className="flex items-center gap-1 text-[8px] font-bold tracking-[0.2em] text-cyan-300/80"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulseGlow" />
+                  SYNCING ON-CHAIN...
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -276,18 +291,7 @@ export default function TopBar({
             </button>
           )}
 
-          {connected ? (
-            <span className="flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">
-              <Wallet size={13} /> LINKED
-            </span>
-          ) : (
-            <button
-              onClick={onConnect}
-              className="flex items-center gap-1 rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-2 text-[11px] text-cyan-200 hover:bg-cyan-500/25"
-            >
-              <Wallet size={13} /> CONNECT
-            </button>
-          )}
+          <WalletConnect wallet={wallet} network={network} enclaves={state.enclaves} />
         </div>
       </div>
 

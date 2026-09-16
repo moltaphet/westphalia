@@ -24,7 +24,7 @@ import {
   type WritePlan,
 } from "./contract";
 import type { TrackedStatus } from "@genlayer/transaction-kit";
-import { fetchChainSnapshot } from "./chainState";
+import { fetchChainSnapshot, type ChainSnapshot } from "./chainState";
 import { ARCHETYPE_PRESETS } from "./archetypes";
 import { orderEnclaves } from "./world";
 
@@ -145,6 +145,94 @@ const PIPELINE_STEPS = [
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// The injected EIP-1193 wallet, plus the event surface MetaMask exposes for the
+// account/chain listeners. `on`/`removeListener` are optional because a bare
+// provider may lack them; the listeners are only bound when they exist.
+interface InjectedProvider {
+  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+  on?(event: string, handler: (...args: unknown[]) => void): void;
+  removeListener?(event: string, handler: (...args: unknown[]) => void): void;
+}
+
+const getEthereum = (): InjectedProvider | undefined =>
+  typeof window === "undefined"
+    ? undefined
+    : (window as unknown as { ethereum?: InjectedProvider }).ethereum;
+
+// Marks that this origin linked a wallet, so a reload silently re-links it (via
+// eth_accounts, which never prompts) instead of dropping to reviewer mode.
+// Cleared on an explicit disconnect.
+const WALLET_STORAGE_KEY = "westphalia:wallet-linked";
+
+// A hex wei balance (native GEN, 18 decimals) -> a short fixed-point GEN string.
+function formatBalanceGen(weiHex: string): string {
+  try {
+    const wei = BigInt(weiHex);
+    const whole = wei / 10n ** 18n;
+    const frac = (wei % 10n ** 18n) / 10n ** 14n; // keep four decimal places
+    return `${whole.toString()}.${frac.toString().padStart(4, "0")}`;
+  } catch {
+    return "0.0000";
+  }
+}
+
+const shortAddress = (addr: string): string =>
+  addr.length > 8 ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : addr;
+
+// The wallet slice the top bar consumes: the linked account's identity plus the
+// three lifecycle actions. Bundled so the connection UI can be lifted out of the
+// store into its own component without a long prop list.
+export interface WalletBundle {
+  address: string | null;
+  balanceGen: string | null;
+  chainId: number | null;
+  connecting: boolean;
+  connect: () => void;
+  disconnect: () => void;
+  switchNetwork: () => void;
+}
+
+// Stale-while-revalidate cache of the last good chain snapshot. The board paints
+// this on mount (see the hydration effect) so a returning visitor gets the real
+// archipelago on frame ~0 instead of an empty board behind a blocking sync;
+// syncChain then refreshes it in place and rewrites the cache.
+const SNAPSHOT_KEY = "westphalia_last_snapshot";
+const SNAPSHOT_VERSION = 1;
+
+function saveSnapshot(snap: ChainSnapshot): void {
+  try {
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ v: SNAPSHOT_VERSION, snap }));
+  } catch {
+    // storage blocked / full: the cache is best-effort
+  }
+}
+
+// Read the cached snapshot, or null when absent, unparseable, or from an older
+// schema. Every array the store reads back is checked, so a corrupt or
+// stale-shape entry degrades to a normal cold load instead of throwing at
+// render time.
+function loadSnapshot(): ChainSnapshot | null {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { v?: number; snap?: ChainSnapshot };
+    if (parsed?.v !== SNAPSHOT_VERSION) return null;
+    const snap = parsed.snap;
+    if (
+      !snap ||
+      !snap.overview ||
+      !Array.isArray(snap.enclaves) ||
+      !Array.isArray(snap.treaties) ||
+      !Array.isArray(snap.ledger)
+    ) {
+      return null;
+    }
+    return snap;
+  } catch {
+    return null;
+  }
+}
+
 export interface FoundRealmInput {
   name: string;
   archetype: Archetype;
@@ -187,10 +275,25 @@ export function useWestphaliaStore() {
   // data came from -- see stateSource for that.
   const [reviewerMode, setReviewerMode] = useState(true);
 
+  // Injected-wallet lifecycle. `connected`/`reviewerMode` above gate *writes*
+  // (whether a live signer exists); these describe the linked account itself.
+  const [address, setAddress] = useState<string | null>(null);
+  const [balanceGen, setBalanceGen] = useState<string | null>(null);
+  // The chain the injected wallet is currently on (from eth_chainId /
+  // chainChanged), distinct from `network` (the app's selected read target).
+  // They differ exactly when the wallet is on the wrong network.
+  const [walletChainId, setWalletChainId] = useState<number | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
   // Where the board's islands and treaties came from. Starts at "loading"
   // because the initial board is empty and nothing has answered yet; the first
   // syncChain resolution moves it to live / empty / simulated.
   const [stateSource, setStateSource] = useState<StateSource>("loading");
+  // True while a background syncChain is in flight, surfaced as a subtle
+  // "SYNCING ON-CHAIN..." indicator in the header. Distinct from stateSource:
+  // the board can be showing a cached-but-real archipelago (stateSource "live")
+  // while a refresh runs behind it, so this must never gate the board's render.
+  const [isSyncing, setIsSyncing] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<TxReceipt | null>(null);
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
   const [chainOverview, setChainOverview] = useState<ChainOverview | null>(null);
@@ -206,6 +309,18 @@ export function useWestphaliaStore() {
   } | null>(null);
 
   const contractRef = useRef<DiplomaticContract>(new DiplomaticContract(network));
+
+  // Mirrors of state read by the EIP-1193 event handlers. The handlers are
+  // bound to the provider once (see the listeners effect) and must not close
+  // over a stale network or address, so they read these instead.
+  const networkRef = useRef(network);
+  const addressRef = useRef<string | null>(null);
+  useEffect(() => {
+    networkRef.current = network;
+  }, [network]);
+  useEffect(() => {
+    addressRef.current = address;
+  }, [address]);
 
   // Supply a write to the approval panel and wait for what the user decides.
   //
@@ -287,6 +402,7 @@ export function useWestphaliaStore() {
 
   const syncChain = useCallback(async () => {
     if (syncing.current) return syncing.current;
+    setIsSyncing(true);
     const run = (async () => {
       const snap = await fetchChainSnapshot(contractRef.current);
       if (!snap) {
@@ -306,6 +422,8 @@ export function useWestphaliaStore() {
         return;
       }
       settled.current = true;
+      // Persist the fresh snapshot so the next cold load hydrates instantly.
+      saveSnapshot(snap);
       setChainOverview(snap.overview);
       // Merge the on-chain roster with any enclave founded in THIS browser
       // session that the snapshot does not yet include, so a just-founded realm
@@ -336,15 +454,36 @@ export function useWestphaliaStore() {
       setStateSource(snap.enclaves.length > 0 ? "live" : "empty");
     })().finally(() => {
       syncing.current = null;
+      setIsSyncing(false);
     });
     syncing.current = run;
     return run;
   }, []);
 
+  // Zero-wait hydration (stale-while-revalidate): paint the last good snapshot
+  // from localStorage on mount, before the network read returns, so a returning
+  // visitor gets the real archipelago immediately instead of an empty board.
+  // This runs only on the client -- localStorage is untouched during SSR and
+  // the initial client render, which both start from the empty board -- so it
+  // introduces no hydration mismatch. settled is set so that a first read which
+  // then FAILS keeps this cached board rather than dropping to the reviewer
+  // seed; a read that SUCCEEDS overwrites it in place (no clear, no flash).
+  useEffect(() => {
+    const cached = loadSnapshot();
+    if (!cached) return;
+    settled.current = true;
+    setChainOverview(cached.overview);
+    setEnclaves(orderEnclaves(cached.enclaves));
+    setTreaties(cached.treaties);
+    setLedger(cached.ledger);
+    setSelectedId((prev) => prev ?? cached.enclaves[0]?.id ?? null);
+    setStateSource(cached.enclaves.length > 0 ? "live" : "empty");
+  }, []);
+
   // Hydrate the board from the deployed contract on mount, and re-read whenever
   // the selected network changes. No wallet is required: GenLayer answers views
   // over gen_call, so a first-time visitor sees real protocol state rather than
-  // seed data.
+  // seed data. This runs in the background over the cached board above.
   useEffect(() => {
     void syncChain();
   }, [network, syncChain]);
@@ -356,7 +495,9 @@ export function useWestphaliaStore() {
     const wasConnected = contractRef.current.connected;
     const contract = bindContract(new DiplomaticContract(network));
     if (!wasConnected) return;
-    void contract.connect().then((ok) => {
+    // Rebind the signer to the new RPC for the account already linked, without
+    // reopening the wallet (the address is known, so no request is made).
+    void contract.connect(addressRef.current ?? undefined).then((ok) => {
       setConnected(ok);
       setReviewerMode(!ok);
     });
@@ -414,21 +555,229 @@ export function useWestphaliaStore() {
     setFocusId(id);
   }, []);
 
-  const connectWallet = useCallback(async () => {
-    const contract = bindContract(new DiplomaticContract(network));
-    const ok = await contract.connect();
-    setConnected(ok);
-    setReviewerMode(!ok);
-    if (ok) void syncChain();
+  // Read the native GEN balance for `addr` from the injected wallet and format
+  // it for the pill. A failed read keeps the prior figure rather than flashing
+  // a zero the chain never reported.
+  const refreshBalance = useCallback(async (addr: string) => {
+    const eth = getEthereum();
+    if (!eth) return;
+    try {
+      const wei = (await eth.request({
+        method: "eth_getBalance",
+        params: [addr, "latest"],
+      })) as string;
+      setBalanceGen(formatBalanceGen(wei));
+    } catch {
+      // keep the last known balance
+    }
+  }, []);
+
+  // Bring the store to the connected state for an already-authorized `account`:
+  // record the address, chain, and balance, then build a live signer so writes
+  // stop simulating. Used by the connect button, the account-switch listener,
+  // and the on-mount silent re-link -- none of which should re-prompt, so the
+  // account is handed to contract.connect() rather than re-requested.
+  const applyConnection = useCallback(
+    async (account: string) => {
+      setAddress(account);
+      setConnected(true);
+      setReviewerMode(false);
+      const eth = getEthereum();
+      if (eth) {
+        try {
+          const cidHex = (await eth.request({ method: "eth_chainId" })) as string;
+          setWalletChainId(parseInt(cidHex, 16));
+        } catch {
+          setWalletChainId(null);
+        }
+      }
+      void refreshBalance(account);
+      const contract = bindContract(new DiplomaticContract(networkRef.current));
+      await contract.connect(account);
+      try {
+        localStorage.setItem(WALLET_STORAGE_KEY, "1");
+      } catch {
+        // best-effort; a reload simply starts disconnected
+      }
+      void syncChain();
+    },
+    [bindContract, refreshBalance, syncChain]
+  );
+
+  // Tear the wallet link down without a page reload: clear the account, revert
+  // to an account-less contract (writes simulate again), and forget the
+  // auto-reconnect flag so the next load starts disconnected.
+  const disconnectWallet = useCallback(() => {
+    setAddress(null);
+    setBalanceGen(null);
+    setWalletChainId(null);
+    setConnected(false);
+    setReviewerMode(true);
+    bindContract(new DiplomaticContract(networkRef.current));
+    try {
+      localStorage.removeItem(WALLET_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     pushLedger({
       block: 1843000 + seq,
       kind: "consensus-verdict",
       actor: "protocol",
-      message: ok
-        ? `Wallet linked to ${network.label}.`
-        : `No wallet detected. Reviewer simulation active on ${network.label}.`,
+      message: "Wallet unlinked. Reviewer read-only mode active.",
     });
-  }, [network, pushLedger, syncChain, bindContract]);
+  }, [bindContract, pushLedger]);
+
+  // Prompt the wallet to move to the app's selected network, adding the chain
+  // first when the wallet does not recognize it (error 4902).
+  const switchNetwork = useCallback(async () => {
+    const eth = getEthereum();
+    if (!eth) return;
+    const target = networkRef.current;
+    const chainIdHex = `0x${target.chainId.toString(16)}`;
+    try {
+      await eth.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: chainIdHex }],
+      });
+    } catch (err) {
+      const code = (err as { code?: number })?.code;
+      if (code === 4902) {
+        try {
+          await eth.request({
+            method: "wallet_addEthereumChain",
+            params: [
+              {
+                chainId: chainIdHex,
+                chainName: target.label,
+                rpcUrls: [target.rpcUrl],
+                nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
+                blockExplorerUrls: [target.explorerUrl],
+              },
+            ],
+          });
+        } catch {
+          // user declined the add; the wrong-network badge stays up
+        }
+      }
+      // any other error (e.g. the user rejected the switch) leaves the badge up
+    }
+  }, []);
+
+  // Connect button: prompt for access, then link the first returned account.
+  // With no injected wallet, stay in reviewer mode and say so.
+  const connectWallet = useCallback(async () => {
+    const eth = getEthereum();
+    if (!eth) {
+      setReviewerMode(true);
+      setConnected(false);
+      pushLedger({
+        block: 1843000 + seq,
+        kind: "consensus-verdict",
+        actor: "protocol",
+        message: `No wallet detected. Reviewer simulation active on ${networkRef.current.label}.`,
+      });
+      return;
+    }
+    setConnecting(true);
+    try {
+      const accounts = (await eth.request({
+        method: "eth_requestAccounts",
+      })) as string[] | undefined;
+      const account = accounts?.[0];
+      if (!account) {
+        setReviewerMode(true);
+        setConnected(false);
+        return;
+      }
+      await applyConnection(account);
+      pushLedger({
+        block: 1843000 + seq,
+        kind: "consensus-verdict",
+        actor: "protocol",
+        message: `Wallet ${shortAddress(account)} linked to ${networkRef.current.label}.`,
+      });
+    } catch {
+      // The user rejected the connection request: remain in reviewer mode.
+      setReviewerMode(true);
+      setConnected(false);
+    } finally {
+      setConnecting(false);
+    }
+  }, [applyConnection, pushLedger]);
+
+  // EIP-1193 account switch: relink the new account, or -- when the array is
+  // empty (the wallet was locked or every account revoked) -- disconnect.
+  const handleAccountsChanged = useCallback(
+    (accounts: string[]) => {
+      const account = accounts?.[0];
+      if (!account) {
+        disconnectWallet();
+        return;
+      }
+      if (account.toLowerCase() === (addressRef.current ?? "").toLowerCase()) return;
+      void applyConnection(account);
+    },
+    [applyConnection, disconnectWallet]
+  );
+
+  // EIP-1193 chain switch: record the wallet's new chain (which drives the
+  // wrong-network badge) and refresh the balance for it.
+  const handleChainChanged = useCallback(
+    (chainIdHex: string) => {
+      const cid =
+        typeof chainIdHex === "string" ? parseInt(chainIdHex, 16) : Number(chainIdHex);
+      setWalletChainId(Number.isFinite(cid) ? cid : null);
+      const addr = addressRef.current;
+      if (addr) void refreshBalance(addr);
+    },
+    [refreshBalance]
+  );
+
+  // Bind the wallet's EIP-1193 events once, and silently re-link on mount if
+  // this origin connected before (eth_accounts never prompts). The handlers are
+  // stable (they read live values through refs), so this binds a single time.
+  useEffect(() => {
+    const eth = getEthereum();
+    if (!eth) return;
+    const onAccounts = (...args: unknown[]) =>
+      handleAccountsChanged((args[0] as string[]) ?? []);
+    const onChain = (...args: unknown[]) => handleChainChanged(args[0] as string);
+    eth.on?.("accountsChanged", onAccounts);
+    eth.on?.("chainChanged", onChain);
+
+    let reconnect = false;
+    try {
+      reconnect = localStorage.getItem(WALLET_STORAGE_KEY) === "1";
+    } catch {
+      reconnect = false;
+    }
+    if (reconnect) {
+      void (async () => {
+        try {
+          const accounts = (await eth.request({ method: "eth_accounts" })) as
+            | string[]
+            | undefined;
+          const account = accounts?.[0];
+          if (account) {
+            await applyConnection(account);
+          } else {
+            try {
+              localStorage.removeItem(WALLET_STORAGE_KEY);
+            } catch {
+              // ignore
+            }
+          }
+        } catch {
+          // no silent reconnect available; stay disconnected
+        }
+      })();
+    }
+
+    return () => {
+      eth.removeListener?.("accountsChanged", onAccounts);
+      eth.removeListener?.("chainChanged", onChain);
+    };
+  }, [handleAccountsChanged, handleChainChanged, applyConnection]);
 
   const enterReviewerMode = useCallback(() => {
     setReviewerMode(true);
@@ -751,10 +1100,22 @@ export function useWestphaliaStore() {
     connected,
     reviewerMode,
     stateSource,
+    isSyncing,
     lastReceipt,
     pipeline,
     chainOverview,
     txRequest,
+    // The linked account and its lifecycle actions, bundled for the top bar's
+    // wallet component.
+    wallet: {
+      address,
+      balanceGen,
+      chainId: walletChainId,
+      connecting,
+      connect: connectWallet,
+      disconnect: disconnectWallet,
+      switchNetwork,
+    } satisfies WalletBundle,
     setHoveredId,
     selectEnclave,
     focusEnclave,

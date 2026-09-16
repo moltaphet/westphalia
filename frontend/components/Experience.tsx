@@ -64,16 +64,10 @@ export default function Experience() {
             onSelect={s.selectEnclave}
             onSelectTreaty={s.setSelectedTreaty}
           />
-          {/* The board holds no islands until the first chain read resolves --
-              see the initial state in store.ts. Say so, rather than leaving a
-              bare archipelago that reads as a broken one. */}
-          {s.stateSource === "loading" && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="font-mono text-xs tracking-widest text-cyan-400 animate-pulseGlow">
-                READING PROTOCOL STATE...
-              </div>
-            </div>
-          )}
+          {/* No blocking overlay: the board mounts and renders immediately over
+              a cached or empty archipelago. Sync progress is reported by the
+              subtle "SYNCING ON-CHAIN..." indicator in the top bar instead of an
+              opaque backdrop that traps the whole viewport. */}
           <HudOverlay
             state={s.state}
             selectedId={s.selectedId}
@@ -130,11 +124,12 @@ export default function Experience() {
         connected={s.connected}
         reviewerMode={s.reviewerMode}
         stateSource={s.stateSource}
+        isSyncing={s.isSyncing}
         chainOverview={s.chainOverview}
         view={view}
         onView={setView}
         onSetNetwork={s.setNetwork}
-        onConnect={s.connectWallet}
+        wallet={s.wallet}
         onEnterReviewer={s.enterReviewerMode}
         onFound={() => setFoundOpen(true)}
         cinematic={cinematic}
