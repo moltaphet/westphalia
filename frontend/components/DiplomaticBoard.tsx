@@ -49,12 +49,21 @@ function CameraRig({
   flyKey: string;
 }) {
   const controls = useThree((s) => s.controls) as
-    | { target: THREE.Vector3; update: () => void }
+    | {
+        target: THREE.Vector3;
+        update: () => void;
+        addEventListener?: (type: string, cb: () => void) => void;
+        removeEventListener?: (type: string, cb: () => void) => void;
+      }
     | null;
   const camera = useThree((s) => s.camera);
   const desiredPos = useRef(new THREE.Vector3(...camPos));
   const desiredTarget = useRef(new THREE.Vector3(...target));
   const flying = useRef(true);
+  // True while the user is actively dragging or wheel-zooming. The fly-to lerp
+  // is suspended for that window so it never fights the pointer -- the source
+  // of the zoom rubber-banding.
+  const interacting = useRef(false);
 
   useEffect(() => {
     desiredPos.current.set(camPos[0], camPos[1], camPos[2]);
@@ -63,8 +72,29 @@ function CameraRig({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flyKey]);
 
+  // Hand control back the instant the user grabs the camera. OrbitControls
+  // dispatches 'start' on a drag or wheel and 'end' on release; 'start' also
+  // cancels any in-progress fly-to, so the rig yields to the user rather than
+  // yanking the view back.
+  useEffect(() => {
+    if (!controls?.addEventListener) return;
+    const onStart = () => {
+      interacting.current = true;
+      flying.current = false;
+    };
+    const onEnd = () => {
+      interacting.current = false;
+    };
+    controls.addEventListener("start", onStart);
+    controls.addEventListener("end", onEnd);
+    return () => {
+      controls.removeEventListener?.("start", onStart);
+      controls.removeEventListener?.("end", onEnd);
+    };
+  }, [controls]);
+
   useFrame(() => {
-    if (!controls || !flying.current) return;
+    if (!controls || !flying.current || interacting.current) return;
     camera.position.lerp(desiredPos.current, 0.08);
     controls.target.lerp(desiredTarget.current, 0.08);
     controls.update();
@@ -114,6 +144,15 @@ export default function DiplomaticBoard({
     return { target: [0, 2, 0], camPos: [40, 34, 40] };
   }, [focusId, layoutMap]);
 
+  // Stable references for the initial camera framing. R3F re-applies any prop
+  // whose array identity changes between renders, so inline literals here would
+  // reset the camera position and orbit target on every store-driven re-render
+  // (a hover, a selection, a background sync) -- snapping the user's zoom back
+  // to the default. Memoizing pins them so they are applied once, at mount, and
+  // the user's OrbitControls state is never clobbered.
+  const initialCamPos = useMemo<[number, number, number]>(() => [40, 34, 40], []);
+  const initialTarget = useMemo<[number, number, number]>(() => [0, 2, 0], []);
+
   const treatyFocus = hoveredId ?? selectedId;
 
   // Force an immediate resize after mount so R3F sizes the drawing buffer and
@@ -134,24 +173,31 @@ export default function DiplomaticBoard({
         dpr={[1, 2]}
         gl={{ alpha: true, antialias: true }}
       >
-        {/* Deep atmospheric fog for cinematic depth falloff. */}
-        <fogExp2 attach="fog" args={["#040711", 0.015]} />
-        <PerspectiveCamera makeDefault position={[40, 34, 40]} fov={45} />
+        {/* Subtle atmospheric depth only. Density is kept low (0.0015) so
+            distant islands keep their silhouette and color when the camera is
+            zoomed out, instead of drowning in near-black fog. */}
+        <fogExp2 attach="fog" args={["#040711", 0.0015]} />
+        <PerspectiveCamera makeDefault position={initialCamPos} fov={45} />
         <OrbitControls
           makeDefault
           enableDamping
-          dampingFactor={0.08}
+          dampingFactor={0.06}
+          zoomSpeed={0.7}
           enablePan
-          minDistance={16}
-          maxDistance={95}
+          minDistance={10}
+          maxDistance={120}
           minPolarAngle={0.12}
           maxPolarAngle={Math.PI / 2.2}
-          target={[0, 2, 0]}
+          target={initialTarget}
         />
         <CameraRig camPos={camPos} target={target} flyKey={focusId ?? "overview"} />
 
-        <ambientLight intensity={0.5} />
+        <ambientLight intensity={0.7} />
         <hemisphereLight args={["#38bdf8", "#0f172a", 0.5]} />
+        {/* Broad fill spanning the whole orbit radius so objects stay lit and
+            legible at extreme camera distances, alongside the keyed shadow
+            light below. */}
+        <directionalLight position={[0, 50, 20]} intensity={0.8} />
         <directionalLight
           position={[30, 40, 20]}
           intensity={1.15}
@@ -182,7 +228,7 @@ export default function DiplomaticBoard({
             sectionSize={10}
             sectionThickness={1}
             sectionColor="#155e75"
-            fadeDistance={95}
+            fadeDistance={140}
             fadeStrength={2.5}
           />
 

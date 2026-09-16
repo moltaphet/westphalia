@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bot,
+  Check,
   Compass,
+  Copy,
+  Eye,
   Gavel,
   Radar,
   ShieldAlert,
@@ -94,7 +97,7 @@ export default function AgentsView({ state, selectedId, onSelect }: Props) {
   return (
     <div className="custom-scrollbar pointer-events-auto absolute inset-0 z-20 flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-[104px] font-mono lg:flex-row lg:overflow-hidden">
       {/* Roster grid */}
-      <div className="flex min-h-[60vh] flex-1 flex-col rounded-md border border-slate-700/60 bg-slate-900/70 shadow-hud backdrop-blur-md lg:min-h-0">
+      <div className="flex min-h-[60vh] flex-1 flex-col rounded-md border border-zinc-800/60 bg-zinc-950/80 shadow-hud backdrop-blur-md lg:min-h-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-700/60 px-4 py-3">
           <Users size={15} className="text-cyan-400" />
           <span className="text-[11px] font-bold tracking-[0.2em] text-slate-200">
@@ -126,28 +129,45 @@ export default function AgentsView({ state, selectedId, onSelect }: Props) {
           </div>
         </div>
 
-        <div className="hud-scroll grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 sm:grid-cols-2 xl:grid-cols-3">
-          {agents.map((agent, i) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              index={i}
-              selected={agent.id === selectedId}
-              onSelect={() =>
-                onSelect(agent.id === selectedId ? null : agent.id)
-              }
-            />
-          ))}
-          {agents.length === 0 && (
-            <div className="col-span-full flex h-40 items-center justify-center text-[11px] tracking-widest text-slate-500">
-              NO SOVEREIGN AGENTS DEPLOYED - FOUND A REALM TO BEGIN
-            </div>
-          )}
+        <div className="hud-scroll min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[720px] border-collapse text-left">
+            <thead className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur">
+              <tr className="text-[8px] font-bold tracking-[0.2em] text-slate-500">
+                <th className="px-3 py-2.5 font-bold">STATUS</th>
+                <th className="px-3 py-2.5 font-bold">NAME / ARCHETYPE</th>
+                <th className="px-3 py-2.5 font-bold">ADDRESS</th>
+                <th className="px-3 py-2.5 font-bold">REPUTATION</th>
+                <th className="px-3 py-2.5 text-right font-bold">COLLATERAL</th>
+                <th className="px-3 py-2.5 text-center font-bold">TREATIES</th>
+                <th className="px-3 py-2.5 text-right font-bold">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agents.map((agent) => (
+                <AgentRow
+                  key={agent.id}
+                  agent={agent}
+                  selected={agent.id === selectedId}
+                  onSelect={onSelect}
+                />
+              ))}
+              {agents.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-3 py-12 text-center text-[11px] tracking-widest text-slate-500"
+                  >
+                    NO SOVEREIGN AGENTS DEPLOYED - FOUND A REALM TO BEGIN
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Selected agent dossier */}
-      <div className="hud-scroll w-full shrink-0 overflow-y-auto rounded-md border border-slate-700/60 bg-slate-900/70 p-4 shadow-hud backdrop-blur-md lg:w-[340px]">
+      <div className="hud-scroll w-full shrink-0 overflow-y-auto rounded-md border border-zinc-800/60 bg-zinc-950/80 p-4 shadow-hud backdrop-blur-md lg:w-[340px]">
         {selected ? (
           <AgentDossier
             agent={selected}
@@ -167,99 +187,143 @@ export default function AgentsView({ state, selectedId, onSelect }: Props) {
   );
 }
 
-function AgentCard({
+function AgentRow({
   agent,
-  index,
   selected,
   onSelect,
 }: {
   agent: AgentEnclave;
-  index: number;
   selected: boolean;
-  onSelect: () => void;
+  onSelect: (id: string | null) => void;
 }) {
+  const [copied, setCopied] = useState(false);
   const statusColor = STATUS_COLOR[agent.status];
   const repColor = tierColor(agent.reputation);
+
+  const copy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(agent.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // clipboard blocked: leave the icon unchanged
+    }
+  };
+
   return (
-    <button
-      onClick={onSelect}
-      className={`agent-enter relative overflow-hidden rounded-md border p-3 text-left transition-colors ${
-        selected
-          ? "border-cyan-500/70 bg-cyan-500/10"
-          : "border-slate-700/60 bg-slate-800/40 hover:border-slate-500"
+    <tr
+      onClick={() => onSelect(selected ? null : agent.id)}
+      className={`cursor-pointer border-b border-zinc-800/60 transition-colors ${
+        selected ? "bg-cyan-500/10" : "hover:bg-zinc-800/50"
       }`}
-      style={{ animationDelay: `${Math.min(index, 12) * 70}ms` }}
+      style={selected ? { boxShadow: "inset 2px 0 0 0 #00E5FF" } : undefined}
     >
-      {selected && <span className="agent-sweep" />}
-
-      <div className="relative flex items-start gap-3">
-        {/* Status beacon with radar ping */}
-        <div className="relative mt-0.5 h-3 w-3 shrink-0">
-          <span
-            className="agent-ping"
-            style={{ backgroundColor: statusColor }}
-          />
-          <span
-            className="relative block h-3 w-3 rounded-full"
-            style={{
-              backgroundColor: statusColor,
-              boxShadow: `0 0 10px ${statusColor}`,
-            }}
-          />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[12px] font-bold tracking-wider text-slate-100">
-              {agent.name}
-            </span>
-            <span style={{ color: statusColor }} className="shrink-0">
-              {ARCHETYPE_ICON[agent.archetype] ?? <Bot size={15} />}
-            </span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-2 text-[9px] tracking-widest text-slate-500">
-            <span>{shortAddr(agent.address)}</span>
+      {/* STATUS */}
+      <td className="px-3 py-2">
+        <span className="flex items-center gap-2">
+          <span className="relative flex h-2 w-2 shrink-0">
             <span
-              className="rounded px-1 py-0.5 font-bold"
-              style={{
-                color: statusColor,
-                backgroundColor: `${statusColor}1a`,
-              }}
-            >
-              {STATUS_LABEL[agent.status]}
-            </span>
+              className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
+              style={{ backgroundColor: statusColor }}
+            />
+            <span
+              className="relative inline-flex h-2 w-2 rounded-full"
+              style={{ backgroundColor: statusColor, boxShadow: `0 0 8px ${statusColor}` }}
+            />
+          </span>
+          <span
+            className="text-[9px] font-bold tracking-widest"
+            style={{ color: statusColor }}
+          >
+            {STATUS_LABEL[agent.status]}
+          </span>
+        </span>
+      </td>
+
+      {/* NAME / ARCHETYPE */}
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-slate-400">
+            {ARCHETYPE_ICON[agent.archetype] ?? <Bot size={14} />}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-[11px] font-bold tracking-wide text-slate-100">
+              {agent.name}
+            </div>
+            <div className="truncate text-[8px] tracking-[0.15em] text-slate-500">
+              {agent.archetype.toUpperCase()}
+            </div>
           </div>
         </div>
-      </div>
+      </td>
 
-      {/* Animated reputation bar */}
-      <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between text-[9px] tracking-widest">
-          <span className="text-slate-500">REPUTATION</span>
-          <span className="font-bold tabular-nums" style={{ color: repColor }}>
-            {agent.reputation} / 100
+      {/* ADDRESS + copy */}
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] tabular-nums text-slate-400">
+            {shortAddr(agent.address)}
+          </span>
+          <button
+            onClick={copy}
+            title="Copy address"
+            className="text-slate-600 transition hover:text-[#00FFA3]"
+          >
+            {copied ? <Check size={11} className="text-[#00FFA3]" /> : <Copy size={11} />}
+          </button>
+        </div>
+      </td>
+
+      {/* REPUTATION meter */}
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${agent.reputation}%`,
+                backgroundColor: repColor,
+                boxShadow: `0 0 6px ${repColor}66`,
+              }}
+            />
+          </div>
+          <span
+            className="w-12 shrink-0 text-[10px] font-bold tabular-nums"
+            style={{ color: repColor }}
+          >
+            {agent.reputation}/100
           </span>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
-          <div
-            className="rep-fill h-full rounded-full"
-            style={{
-              width: `${agent.reputation}%`,
-              backgroundColor: repColor,
-              boxShadow: `0 0 8px ${repColor}66`,
-              animationDelay: `${Math.min(index, 12) * 70 + 200}ms`,
-            }}
-          />
-        </div>
-      </div>
+      </td>
 
-      {/* Telemetry strip */}
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <Stat label="COLLATERAL" value={`${agent.collateral.toLocaleString("en-US")}`} unit="GEN" />
-        <Stat label="TREATIES" value={`${agent.treaties.length}`} unit="" />
-        <Stat label="COMPLIANCE" value={`${agent.complianceScore}`} unit="%" />
-      </div>
-    </button>
+      {/* COLLATERAL */}
+      <td className="whitespace-nowrap px-3 py-2 text-right">
+        <span className="text-[10px] font-bold tabular-nums text-slate-200">
+          {agent.collateral.toLocaleString("en-US")}
+        </span>
+        <span className="ml-1 text-[8px] text-slate-500">GEN</span>
+      </td>
+
+      {/* ACTIVE TREATIES */}
+      <td className="px-3 py-2 text-center">
+        <span className="inline-flex min-w-[22px] items-center justify-center rounded border border-zinc-700 bg-zinc-800/60 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#00E5FF]">
+          {agent.treaties.length}
+        </span>
+      </td>
+
+      {/* ACTIONS */}
+      <td className="px-3 py-2 text-right">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(agent.id);
+          }}
+          className="inline-flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[9px] font-bold tracking-widest text-cyan-200 transition hover:bg-cyan-500/20"
+        >
+          <Eye size={11} /> INSPECT
+        </button>
+      </td>
+    </tr>
   );
 }
 
