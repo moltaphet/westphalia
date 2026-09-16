@@ -275,53 +275,70 @@ export function useWestphaliaStore() {
   // legitimately empty and a failed read has something it may fall back to.
   const settled = useRef(false);
 
+  // The sync currently in flight, or null. syncChain is triggered from several
+  // places -- mount, a network switch, connectWallet, and after every confirmed
+  // write -- and React re-runs mount effects in development, so two of these can
+  // fire at once. Each sync is a burst of gen_call reads and the public RPC caps
+  // a client at 30 per minute, so overlapping syncs were a direct route to a
+  // 429. A second caller now awaits the sync already running instead of starting
+  // its own. There is deliberately no interval poller: the board reads the chain
+  // only on mount, on a network change, and after a confirmed transaction.
+  const syncing = useRef<Promise<void> | null>(null);
+
   const syncChain = useCallback(async () => {
-    const snap = await fetchChainSnapshot(contractRef.current);
-    if (!snap) {
-      // A refresh that could not read the chain is not evidence that the
-      // protocol is empty. If something is already on screen it remains the
-      // best account of the protocol on hand, so leave it and its source
-      // alone -- "live" for a board that is stale but real. If nothing is,
-      // then this is the FIRST read failing, and the reviewer seed is exactly
-      // what it exists for.
-      if (settled.current) return;
+    if (syncing.current) return syncing.current;
+    const run = (async () => {
+      const snap = await fetchChainSnapshot(contractRef.current);
+      if (!snap) {
+        // A refresh that could not read the chain is not evidence that the
+        // protocol is empty. If something is already on screen it remains the
+        // best account of the protocol on hand, so leave it and its source
+        // alone -- "live" for a board that is stale but real. If nothing is,
+        // then this is the FIRST read failing, and the reviewer seed is exactly
+        // what it exists for.
+        if (settled.current) return;
+        settled.current = true;
+        setEnclaves(orderEnclaves(INITIAL_ENCLAVES));
+        setTreaties(TREATIES);
+        setLedger(LEDGER);
+        setSelectedId(INITIAL_ENCLAVES[0]?.id ?? null);
+        setStateSource("simulated");
+        return;
+      }
       settled.current = true;
-      setEnclaves(orderEnclaves(INITIAL_ENCLAVES));
-      setTreaties(TREATIES);
-      setLedger(LEDGER);
-      setSelectedId(INITIAL_ENCLAVES[0]?.id ?? null);
-      setStateSource("simulated");
-      return;
-    }
-    settled.current = true;
-    setChainOverview(snap.overview);
-    // Merge the on-chain roster with any enclave founded in THIS browser session
-    // that the snapshot does not yet include, so a just-founded realm is not
-    // wiped by the next sync before it is indexed on-chain. A session-founded
-    // enclave carries `spawnedAt` (see foundRealm) and a `realm-` id; once the
-    // chain reports that same id the chain copy wins.
-    setEnclaves((prev) => {
-      const incoming = new Set(snap.enclaves.map((e) => e.id));
-      const localPending = prev.filter(
-        (e) => e.spawnedAt !== undefined && !incoming.has(e.id)
+      setChainOverview(snap.overview);
+      // Merge the on-chain roster with any enclave founded in THIS browser
+      // session that the snapshot does not yet include, so a just-founded realm
+      // is not wiped by the next sync before it is indexed on-chain. A session-
+      // founded enclave carries `spawnedAt` (see foundRealm) and a `realm-` id;
+      // once the chain reports that same id the chain copy wins.
+      setEnclaves((prev) => {
+        const incoming = new Set(snap.enclaves.map((e) => e.id));
+        const localPending = prev.filter(
+          (e) => e.spawnedAt !== undefined && !incoming.has(e.id)
+        );
+        return orderEnclaves([...snap.enclaves, ...localPending]);
+      });
+      setTreaties(snap.treaties);
+      // The feed is replaced with it. Leaving the simulated seed in place would
+      // print fabricated history under real islands -- events naming enclaves
+      // the contract has never heard of.
+      setLedger(snap.ledger);
+      // Keep the selection pointing at an enclave that still exists -- one the
+      // chain returned, or a realm founded this session (kept above). Otherwise
+      // fall back to the first on-chain enclave, or leave it where it is when
+      // the chain is empty so a fresh local realm stays selected.
+      setSelectedId((prev) =>
+        prev && (snap.enclaves.some((e) => e.id === prev) || prev.startsWith("realm-"))
+          ? prev
+          : (snap.enclaves[0]?.id ?? prev ?? null)
       );
-      return orderEnclaves([...snap.enclaves, ...localPending]);
+      setStateSource(snap.enclaves.length > 0 ? "live" : "empty");
+    })().finally(() => {
+      syncing.current = null;
     });
-    setTreaties(snap.treaties);
-    // The feed is replaced with it. Leaving the simulated seed in place would
-    // print fabricated history under real islands -- events naming enclaves the
-    // contract has never heard of.
-    setLedger(snap.ledger);
-    // Keep the selection pointing at an enclave that still exists -- one the
-    // chain returned, or a realm founded this session (kept above). Otherwise
-    // fall back to the first on-chain enclave, or leave it where it is when the
-    // chain is empty so a fresh local realm stays selected.
-    setSelectedId((prev) =>
-      prev && (snap.enclaves.some((e) => e.id === prev) || prev.startsWith("realm-"))
-        ? prev
-        : (snap.enclaves[0]?.id ?? prev ?? null)
-    );
-    setStateSource(snap.enclaves.length > 0 ? "live" : "empty");
+    syncing.current = run;
+    return run;
   }, []);
 
   // Hydrate the board from the deployed contract on mount, and re-read whenever

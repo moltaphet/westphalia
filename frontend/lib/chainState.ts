@@ -327,11 +327,40 @@ export function mapRecords(raw: RawRecords): ChainSnapshot {
   return { overview, treaties, enclaves: orderEnclaves([...enclaveById.values()]), ledger };
 }
 
+// The public GenLayer RPC caps one client at 30 requests per minute, and a full
+// snapshot is many gen_call reads -- the overview, one per treaty, one per
+// enclave, each with a retry. Two levers keep a snapshot under that ceiling.
+// First, a small gap between successive reads, so the calls trickle out over a
+// couple of seconds instead of arriving in one burst a token-bucket limiter
+// rejects wholesale.
+const SNAPSHOT_RPC_GAP_MS = 120;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Second, single-flight per contract: overlapping snapshots (React's
+// double-mount in dev, a post-write resync arriving mid-read, a rapid network
+// switch) used to double the read storm and trip `429 Too Many Requests`. A
+// second caller now awaits the read already in flight rather than starting its
+// own. Keyed by the contract instance so a network switch -- which builds a
+// fresh client -- is never handed a stale in-flight snapshot from the previous
+// chain, and a finished read drops out of the map for the next refresh.
+const inFlight = new WeakMap<DiplomaticContract, Promise<ChainSnapshot | null>>();
+
 // The full protocol state as the chain currently holds it, or null when the
 // contract could not be reached at all (offline, wrong address, RPC down).
 // The caller keeps the last good board in that case rather than rendering an
-// empty archipelago.
-export async function fetchChainSnapshot(
+// empty archipelago. Deduplicated: while one read is in flight, a duplicate
+// concurrent call coalesces onto it instead of launching a second read storm.
+export function fetchChainSnapshot(
+  contract: DiplomaticContract
+): Promise<ChainSnapshot | null> {
+  const existing = inFlight.get(contract);
+  if (existing) return existing;
+  const run = snapshotOnce(contract).finally(() => inFlight.delete(contract));
+  inFlight.set(contract, run);
+  return run;
+}
+
+async function snapshotOnce(
   contract: DiplomaticContract
 ): Promise<ChainSnapshot | null> {
   const overview = await readJson(contract, "get_protocol_overview", []);
@@ -349,6 +378,7 @@ export async function fetchChainSnapshot(
   // leaves the last good snapshot on screen, which syncChain already handles.
   const treaties: Record<string, unknown>[] = [];
   for (let id = 1; id < nextTreatyId; id++) {
+    await sleep(SNAPSHOT_RPC_GAP_MS);
     const rec = await readJsonStrict(contract, "get_treaty", [id]);
     if (!rec) return null;
     treaties.push({ ...rec, id });
@@ -372,10 +402,12 @@ export async function fetchChainSnapshot(
   // A null count is a transient read failure, not proof of an empty roster --
   // the overview already answered -- so fall through to the treaty-party walk
   // below rather than aborting or rendering an empty board. One retry first.
+  await sleep(SNAPSHOT_RPC_GAP_MS);
   let countRaw = await contract.read<unknown>("get_enclave_count", []);
   if (countRaw == null) countRaw = await contract.read<unknown>("get_enclave_count", []);
   const count = countRaw == null ? 0 : Number(asString(countRaw, "0")) || 0;
   for (let i = 0; i < count; i++) {
+    await sleep(SNAPSHOT_RPC_GAP_MS);
     const rec = await readJsonStrict(contract, "get_enclave_by_index", [i]);
     if (!rec) return null; // an in-range slot that will not read shrinks the roster; abort
     if (rec.exists === false) continue; // tombstone: enclave withdrew its collateral
@@ -388,6 +420,7 @@ export async function fetchChainSnapshot(
     for (const k of ["party_a", "party_b"]) {
       const addr = asString(t[k]);
       if (!addr.startsWith("0x") || seen.has(addr.toLowerCase())) continue;
+      await sleep(SNAPSHOT_RPC_GAP_MS);
       const rec = await readJsonStrict(contract, "get_enclave", [addr]);
       if (!rec) return null;
       pushEnclave(rec, addr);
