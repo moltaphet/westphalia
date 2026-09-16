@@ -1,3 +1,7 @@
+// Earliest root entry: install the BigInt JSON serializer on the server/root
+// module graph as well, so nothing serializes a bigint before it is in place.
+// (The client write path is additionally covered from lib/contract.ts.)
+import "@/lib/bigintPolyfill";
 import type { Metadata } from "next";
 // The Transaction Kit panel's own stylesheet, scoped under `.gltk-root` so it
 // cannot leak into the HUD. Imported before globals.css so this app's token

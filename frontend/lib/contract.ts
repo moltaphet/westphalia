@@ -1,3 +1,7 @@
+// Installs BigInt.prototype.toJSON before any write serializes its bigint args
+// (expires_at, treaty ids, atto-scale bond values). Must be the first import so
+// the polyfill is active by the time write() below hashes JSON.stringify(args).
+import "./bigintPolyfill";
 import type { NetworkConfig, TreatyKind } from "./types";
 import type { SubmitInput, TrackedStatus } from "@genlayer/transaction-kit";
 import {
