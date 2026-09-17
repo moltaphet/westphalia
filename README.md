@@ -104,6 +104,7 @@ code layer only backstops the tribunal, it never replaces it.
 6. [Frontend architecture](#6-frontend-architecture)
 7. [Autonomous agents](#7-autonomous-agents)
 8. [Repository layout](#8-repository-layout)
+9. [Roadmap](#9-roadmap)
 
 **Part II -- Tutorials**
 
@@ -875,6 +876,69 @@ integration suite, which needs a funded account and a live chain; it is not a
 merge gate and `.github/workflows/contracts.yml` says so. `gltest.config.yaml`
 defaults to `localnet` because the simulator needs no funding, and pins
 `studio_devnet` at the RPC this project deploys to.
+
+---
+
+## 9. Roadmap
+
+Everything in Part I describes the revision that is deployed today. This section
+describes what comes next. It is **not implemented**: none of the methods named
+below exists on the contract, and the counts and lifecycles here are proposals,
+not observations.
+
+### Phase V5: bilateral due process and asymmetric dispute windows (*Audi Alteram Partem*)
+
+The current revision (V4.1.1) optimizes for deterministic single-transaction
+settlement, which is the right shape for fast agent consensus: a plaintiff files,
+the tribunal reads the defendant's party-attributed telemetry and the plaintiff's
+evidence document, and settlement runs on the same transaction. It is fast -- but
+it is *ex parte*. The accused party never gets to answer before the verdict
+lands.
+
+V5 introduces institutional-grade bilateral legal proceedings, trading latency
+for due process:
+
+- **Stage 1 -- Notice of breach (`file_dispute`).** The plaintiff stakes a
+  reputation-scaled dispute bond and submits its claims and evidence URI. The
+  treaty locks into a new `DISPUTE_PENDING` status with an immutable 24-hour
+  defense window (`DEFENSE_COOLDOWN = 86400` seconds), during which neither
+  party's bond can move.
+- **Stage 2 -- Defendant rebuttal (`submit_defense`).** The accused enclave holds
+  standing to answer, filing counter-telemetry and rebuttal audit logs
+  (`defense_uri`, `defense_hash`). This is the step that turns the round into
+  genuine adversarial cross-examination instead of a one-sided reading.
+- **Stage 3 -- Permissionless adjudication (`adjudicate_dispute`).** Once a
+  defense is on file, or the 24-hour window has lapsed by default, anyone may
+  trigger the GenLayer multi-LLM validator quorum. The tribunal synthesizes
+  *both* claims and counter-evidence under the Equivalence Principle before
+  rendering the final categorical verdict.
+- **Economic defense bonds.** A defendant stakes a matching defense bond to
+  contest a claim, which puts a price on bad-faith obstruction: the winner is
+  rewarded, and a defendant who files a defense it cannot support forfeits.
+
+The 24-hour window is the load-bearing decision here, and the asymmetry is
+deliberate: the plaintiff pays in latency, the defendant gains a right of reply.
+Both directions stay bounded -- an unanswered window lapses and adjudication
+proceeds without a defense -- so a defendant cannot stall a valid claim forever.
+
+#### What V5 changes below the surface
+
+- **Public surface.** Three new writes (`file_dispute`, `submit_defense`,
+  `adjudicate_dispute`) take the contract from 23 methods to 26. The ABI in
+  `frontend/lib/contract.ts` and the row count in section 5.3 move in the same
+  commit, because a stale ABI is a silent failure.
+- **Lifecycle.** `DISPUTE_PENDING` becomes a fifth treaty status alongside
+  PROPOSED / ACTIVE / SETTLED / EXPIRED, and `locked_escrow` has to carry it for
+  the solvency invariant in section 4.3 to keep holding across the window.
+- **Adjudication leaves the filing transaction.** The non-deterministic round
+  runs in stage 3, not stage 1. `trigger_dispute`'s current guarantee -- one
+  transaction, one verdict, with a transient fetch reverting the whole dispute and
+  refunding the bond -- is replaced by a two-step flow that either party can drive
+  to completion.
+- **The agent loop follows.** `agent/demo.py` reaches a verdict in a single
+  `trigger_dispute` call today; under V5 it files, answers or waits out the
+  window, then adjudicates, and `agent/decider.py` gains a defense decision to
+  score. `agent/seed.py` is unaffected -- it wires treaties and never litigates.
 
 ---
 
