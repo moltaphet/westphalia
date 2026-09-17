@@ -513,6 +513,12 @@ Inside the non-deterministic block:
    anti-hallucination clamp -- the three corridors described in 1.1 -- before
    settlement.
 
+> **Cryptographic commitment.** `evidence_hash` is computed over the raw HTTP 2xx
+> response body rather than the post-rendered DOM. This guarantees deterministic
+> off-chain verification (reproducible with `curl` and `sha256sum`) without
+> engine-specific layout drift. Evidence endpoints are expected to serve static
+> audit artifacts.
+
 ### 5.5 Adversarial hardening
 
 Every defense below was first confirmed as a *working exploit* against an
