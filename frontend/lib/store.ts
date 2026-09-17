@@ -969,19 +969,27 @@ export function useWestphaliaStore() {
   );
 
   const triggerDispute = useCallback(
-    async (treatyId: string, evidence: string) => {
+    async (
+      treatyId: string,
+      allegation: string,
+      evidenceUri: string,
+      evidenceHash: string
+    ) => {
       await runPipeline(`Dispute ${treatyId.toUpperCase()}`, async () => {
         const t = treaties.find((x) => x.id === treatyId);
-        // V3: adjudication runs against the treaty-bound oracles; the caller
-        // supplies only the allegation and its evidence hash.
-        const bond = t
-          ? Math.max(500, Math.ceil(t.bondGen * 0.05))
-          : 500;
+        // V4.2: adjudication runs against the treaty-bound oracles, so the caller
+        // supplies the allegation, the evidence URI, and the SHA-256 that URI's
+        // document must hash to. The URI and digest used to be fabricated here
+        // (`ipfs://evidence/<id>` and a timestamp string), neither of which the
+        // contract would accept: the SSRF gate admits http(s) only, and the
+        // digest has to be a real SHA-256 of the served bytes. Both now arrive
+        // from the form.
+        const bond = t ? Math.max(500, Math.ceil(t.bondGen * 0.05)) : 500;
         const receipt = await contractRef.current.triggerDispute(
           BigInt(t?.chainId ?? 0),
-          evidence,
-          `ipfs://evidence/${treatyId}`,
-          `ev-${treatyId}-${Date.now()}`,
+          allegation,
+          evidenceUri,
+          evidenceHash,
           bond
         );
         setLastReceipt(receipt);
@@ -994,7 +1002,6 @@ export function useWestphaliaStore() {
         const defendant = parties.find((p) => p !== plaintiff) ?? parties[1] ?? "protocol";
         const nameOf = (id: string) =>
           enclaves.find((e) => e.id === id)?.name ?? id;
-        const evidenceUri = `ipfs://evidence/${treatyId}`;
 
         pushLedger({
           block: 1843000 + seq,

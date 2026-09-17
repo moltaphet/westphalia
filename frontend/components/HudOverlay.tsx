@@ -41,7 +41,12 @@ interface Props {
   onRatify: (treatyId: string) => void;
   onDissolve: (treatyId: string) => void;
   onExit: (treatyId: string) => void;
-  onDispute: (treatyId: string, evidence: string) => void;
+  onDispute: (
+    treatyId: string,
+    allegation: string,
+    evidenceUri: string,
+    evidenceHash: string
+  ) => void;
   onClaim: (treatyId: string) => void;
   onOverlayChange: (open: boolean) => void;
   leftCollapsed: boolean;
@@ -796,6 +801,32 @@ function ProposeModal({
   );
 }
 
+// V4.2 `trigger_dispute` takes four arguments: the treaty, the allegation
+// prose, the evidence URI, and the SHA-256 the filing commits to. The contract's
+// SSRF gate admits http(s) only, so the `ipfs://` placeholder this modal used to
+// carry could never have passed it -- the call would have reverted with
+// ERR_UNSAFE_TELEMETRY_URL before the tribunal was ever empaneled.
+//
+// The digest is a commitment, not a label. Whatever ends up in the hash field
+// has to be the SHA-256 of the bytes the URI actually serves (`curl -s <uri> |
+// sha256sum`), because the contract re-reads the document inside the consensus
+// round and adjudicates NO_EVIDENCE when the two disagree. The default below is
+// a well-formed sample for the recording and matches no real endpoint.
+const DISPUTE_ALLEGATION = "Breach of latency threshold on secondary node";
+const DISPUTE_EVIDENCE_URI =
+  "https://raw.githubusercontent.com/incident-reports/telemetry/main/covenant-audit.json";
+const DISPUTE_EVIDENCE_HASH =
+  "4a7c1b89ef23d401a75b28d09f7a9321e05d8bc1946802e3b5df90123456789a";
+
+// Mirrors the contract's `_canon_hash`: a leading `0x` and any casing are
+// accepted on the way in, because every explorer prints the digest that way.
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const HTTP_URI_RE = /^https?:\/\//i;
+
+function canonHash(raw: string): string {
+  return raw.trim().toLowerCase().replace(/^0x/, "");
+}
+
 function DisputeModal({
   treaties,
   onClose,
@@ -803,31 +834,74 @@ function DisputeModal({
 }: {
   treaties: Treaty[];
   onClose: () => void;
-  onSubmit: (treatyId: string, evidence: string) => void;
+  onSubmit: (
+    treatyId: string,
+    allegation: string,
+    evidenceUri: string,
+    evidenceHash: string
+  ) => void;
 }) {
   const [treatyId, setTreatyId] = useState(treaties[0]?.id ?? "");
-  const [evidence, setEvidence] = useState("ipfs://bafy...breach-evidence");
+  const [allegation, setAllegation] = useState(DISPUTE_ALLEGATION);
+  const [evidenceUri, setEvidenceUri] = useState(DISPUTE_EVIDENCE_URI);
+  const [evidenceHash, setEvidenceHash] = useState(DISPUTE_EVIDENCE_HASH);
+
+  const hashOk = SHA256_RE.test(canonHash(evidenceHash));
+  const uriOk = HTTP_URI_RE.test(evidenceUri.trim());
+  const ready = Boolean(treatyId) && allegation.trim().length > 0 && uriOk && hashOk;
+
   return (
     <ModalShell title="TRIGGER DISPUTE" icon={<Swords size={15} className="text-amber-400" />} onClose={onClose}>
       <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
         Submit evidence of a treaty breach to empanel GenLayer multi-LLM validators for consensus
         arbitration.
       </p>
-      <Field label="TARGET TREATY">
-        <select className={inputCls} value={treatyId} onChange={(e) => setTreatyId(e.target.value)}>
-          {treaties.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.id.toUpperCase()} - {t.kind}
-            </option>
-          ))}
-        </select>
+      {treaties.length === 0 ? (
+        <p className="mb-3 text-[11px] leading-relaxed text-amber-300">
+          No treaty is open to dispute. Only an ACTIVE treaty carries dispute standing.
+        </p>
+      ) : (
+        <Field label="TARGET TREATY">
+          <select className={inputCls} value={treatyId} onChange={(e) => setTreatyId(e.target.value)}>
+            {treaties.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.id.toUpperCase()} - {t.kind}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      <Field label="ALLEGATION">
+        <textarea
+          className={`${inputCls} h-16 resize-none`}
+          value={allegation}
+          onChange={(e) => setAllegation(e.target.value)}
+        />
       </Field>
-      <Field label="EVIDENCE URI">
-        <input className={inputCls} value={evidence} onChange={(e) => setEvidence(e.target.value)} />
+      <Field label="EVIDENCE URI (http/https)">
+        <input
+          className={inputCls}
+          value={evidenceUri}
+          onChange={(e) => setEvidenceUri(e.target.value)}
+        />
       </Field>
+      <Field label="EVIDENCE SHA-256">
+        <input
+          className={inputCls}
+          value={evidenceHash}
+          onChange={(e) => setEvidenceHash(e.target.value)}
+        />
+      </Field>
+      <p className="-mt-1 mb-3 text-[10px] leading-relaxed text-slate-500">
+        {!uriOk
+          ? "The contract fetches the document itself: only an http(s) URI passes its SSRF gate."
+          : !hashOk
+            ? "The hash must be the 64-character SHA-256 of the bytes that URI serves."
+            : "The digest must match the served document, or the filing is adjudicated on NO_EVIDENCE."}
+      </p>
       <button
-        onClick={() => onSubmit(treatyId, evidence)}
-        disabled={!treatyId}
+        onClick={() => onSubmit(treatyId, allegation.trim(), evidenceUri.trim(), canonHash(evidenceHash))}
+        disabled={!ready}
         className="mt-2 w-full rounded border border-amber-500/50 bg-amber-500/15 py-2 text-[12px] font-bold tracking-widest text-amber-200 hover:bg-amber-500/25 disabled:opacity-40"
       >
         SUBMIT TO VALIDATOR CONSENSUS
@@ -897,9 +971,12 @@ export default function HudOverlay({
     onOverlayChange(modal !== null || auditEvent !== null);
   }, [modal, auditEvent, onOverlayChange]);
 
-  const disputableTreaties = state.treaties.filter(
-    (t) => t.status === "active" || t.status === "pending"
-  );
+  // Dispute standing is ACTIVE only. `trigger_dispute` reverts
+  // ERR_TREATY_NOT_ACTIVE against a PROPOSED treaty, and a settled or expired
+  // one has no covenant left to breach, so listing them only produced a failed
+  // write. This list also feeds the modal's default selection, so the first
+  // entry is always a treaty a dispute can actually land on.
+  const disputableTreaties = state.treaties.filter((t) => t.status === "active");
 
   // Tactical hotkeys: C propose, D dispute, E claim, Escape closes overlays.
   // Letter keys are ignored while any overlay is open so they never swap the
@@ -967,7 +1044,7 @@ export default function HudOverlay({
           onDissolve={onDissolve}
           onExit={onExit}
           onDispute={(id) => {
-            onDispute(id, `ipfs://evidence/${id}`);
+            onDispute(id, DISPUTE_ALLEGATION, DISPUTE_EVIDENCE_URI, DISPUTE_EVIDENCE_HASH);
           }}
         />
 
@@ -1008,8 +1085,8 @@ export default function HudOverlay({
         <DisputeModal
           treaties={disputableTreaties}
           onClose={() => setModal(null)}
-          onSubmit={(id, ev) => {
-            onDispute(id, ev);
+          onSubmit={(id, allegation, evidenceUri, evidenceHash) => {
+            onDispute(id, allegation, evidenceUri, evidenceHash);
             setModal(null);
           }}
         />

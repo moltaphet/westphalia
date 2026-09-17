@@ -31,7 +31,8 @@ export const TREATIES: Treaty[] = [
     dispute: {
       validators: 5,
       consensus: 62,
-      evidenceUri: "ipfs://bafy...treaty-t3-breach-evidence",
+      evidenceUri:
+        "https://raw.githubusercontent.com/incident-reports/telemetry/main/covenant-audit.json",
       openedBlock: 1842991,
     },
     terms:
