@@ -284,16 +284,17 @@ treaty storage. Four deterministic gates run before any non-deterministic work:
 4. The replay index -- `treaty_id + plaintiff + evidence_hash` -- must be fresh
    (`ERR_REPLAY_DISPUTE`), and a 300-second cooldown must have elapsed.
 
-The minimum bond scales with the *defendant's* reputation, so suing an honest
-party costs more than suing a suspect one:
+The minimum bond scales inversely with the *plaintiff's* reputation, requiring newer
+or lower-reputation plaintiffs to stake a higher anti-griefing bond:
 
 ```
-bond = MIN_DISPUTE_BOND * (150 - min(defendant_rep, 100)) / 100
+bond = MIN_DISPUTE_BOND * (150 - min(plaintiff_rep, 100)) / 100
 ```
 
-`MIN_DISPUTE_BOND` is 500 GEN, so the range is 250-750 GEN. Below reputation 30
-an anti-Sybil cap of 2000 GEN applies to the *defendant's* bond
-(`ERR_UNTRUSTED_BOND_CAP`).
+`MIN_DISPUTE_BOND` is 500 GEN, scaling between 250-750 GEN (a 100-rep plaintiff posts 250 GEN;
+a 0-rep plaintiff posts 750 GEN). Separately, to prevent Sybil bond inflation, an anti-Sybil
+cap of 2000 GEN (`MAX_UNTRUSTED_BOND`) applies to treaty proposals initiated by any enclave
+with reputation below 30 (`ERR_UNTRUSTED_BOND_CAP`).
 
 Only then does the contract enter the non-deterministic block: fetch both
 oracles, compare them, and submit the clause plus the readings to
