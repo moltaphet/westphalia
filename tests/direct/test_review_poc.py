@@ -86,13 +86,14 @@ def test_tribunal_verdict_trusted_above_zero_telemetry(direct_vm, direct_deploy,
 
 
 # --- Semantic covenant adjudication: evidence + terms drive the verdict -----
-def test_semantic_covenant_breach_with_evidence(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """True semantic adjudication: the tribunal reads a REAL evidence document
-    on-chain and reasons over the covenant. Telemetry is a spotless 0 bps, so the
-    ONLY thing that lifts the verdict above the backstop is the incident report
-    proving a sustained SLA breach -- a direct contrast with the no-evidence
-    backstop test, where the same 0 bps + injected CRITICAL floors to NORMAL.
-    Here, evidence present -> the tribunal's CRITICAL_BREACH stands."""
+def test_semantic_evidence_lifts_zero_telemetry_to_elevated(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """True semantic adjudication AND the V4 ceiling corridor together: the
+    tribunal reads a REAL evidence document on-chain and returns CRITICAL_BREACH,
+    but telemetry is a spotless 0 bps. Because bps < 2500, a full sanction is
+    forbidden -- with corroborating evidence the verdict is capped to
+    ELEVATED_RISK (a 25% slash), never CRITICAL. The evidence still lifts it above
+    the no-evidence NORMAL floor; it just cannot produce a full sanction on
+    negligible telemetry."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
     bob = khex(c, direct_vm, direct_bob)
@@ -126,10 +127,11 @@ def test_semantic_covenant_breach_with_evidence(direct_vm, direct_deploy, direct
     )
     direct_vm.value = 0
 
-    # The evidence-driven verdict stands (not clamped): defendant is sanctioned
-    # despite only modest telemetry -- qualitative terms + evidence decided it.
-    assert verdict == "CRITICAL_BREACH"
-    assert c.get_enclave(bob)["status"] == "SANCTIONED"
+    # V4 ceiling: 0 bps + evidence caps CRITICAL to ELEVATED_RISK. The defendant
+    # is NOT fully sanctioned, but takes the 25% elevated slash.
+    assert verdict == "ELEVATED_RISK"
+    assert c.get_enclave(bob)["status"] == "ACTIVE"
+    assert int(c.get_treaty(tid)["bond_b"]) == BOND - BOND * 25 // 100
 
 
 def test_evidence_ignored_when_uri_not_web_fetchable(direct_vm, direct_deploy, direct_alice, direct_bob):

@@ -15,7 +15,7 @@ from genlayer_py import create_client
 from genlayer_py.chains import studio_devnet  # type: ignore[reportAttributeAccessIssue]
 
 # Westphalia V3 contract deployed on GenLayer Studio Next (valid EIP-55 checksum).
-CONTRACT = cast(ChecksumAddress, "0x126d145Edcb422E94a3202dFa5c983C8DC5374d9")
+CONTRACT = cast(ChecksumAddress, "0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED")
 
 _OK_EXEC = "FINISHED_WITH_RETURN"
 _OK_CONSENSUS = "MAJORITY_AGREE"

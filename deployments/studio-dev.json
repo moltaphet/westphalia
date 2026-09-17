@@ -2,12 +2,12 @@
   "network": "studio-next",
   "chain_id": 61997,
   "rpc_url": "https://studio-next.genlayer.com/api",
-  "contract_address": "0x126d145Edcb422E94a3202dFa5c983C8DC5374d9",
-  "explorer_url": "https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9",
+  "contract_address": "0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED",
+  "explorer_url": "https://explorer-studio-next.genlayer.com/address/0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED",
   "source": "contracts/westphalia.py",
   "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
-  "source_sha256_at_record": "868c346c64a077ef2db6d72e4b1fc14f243acd264c8de24b527025c9b323bcfa",
-  "revision": "V3 (audited, production-hardened): true semantic multi-LLM adjudication -- validators read the unstructured evidence document on-chain via gl.nondet.web.get and reason over the qualitative covenant terms under the Equivalence Principle (prompt_comparative), with a narrow code-side anti-hallucination clamp (0 bps AND no evidence) rather than an arithmetic override. Game-theoretic hardening: party-attributed telemetry ({\"party_a\", \"party_b\"}) that eliminates the race to courthouse; neutral FEED_CONFLICT resolution (100% bond refund, 0 fee) on oracle contradiction / >5% divergence / unreachable feeds; independent per-party elevated slash flags (elevated_slashed_a, elevated_slashed_b); dual independent-host oracle requirement; SSRF hardening (urlsplit, CGNAT/0.0.0.0/8, trailing-dot + backslash normalization); and governor rotation (transfer_governor, rejects the zero address).",
+  "source_sha256_at_record": "26afa0ad7973b0c367ed717faf58af5aa0d11a19098d65e605f707fe5c02f1b9",
+  "revision": "V4 (audited): builds on the V3 audited base with a fourth hardening pass. Prompt-injection isolation -- unmistakable === N. ... === section headers (the evidence sanitizer turns an attacker's <...> into [...], so bracketed headers were forgeable), untrusted evidence and covenant terms wrapped in <untrusted_evidence_data> / <covenant_terms> tags whose closing tags cannot be forged (< and > are stripped), and a hard CRITICAL SECURITY DIRECTIVE. Ground-truth telemetry bounding corridors in _clamp_tier: a full sanction (CRITICAL_BREACH) is forbidden below BPS_ELEVATED (2500) -- capped to ELEVATED_RISK with corroborating evidence, else NORMAL -- and MALICIOUS_REPORT is forbidden at/above BPS_CRITICAL (7500), floored to NORMAL so an honest high-telemetry plaintiff never loses its whole bond. The equivalence round now carries the judicial rationale: leader() returns json.dumps({verdict, rationale}), prompt_comparative compares both the verdict tier and the legal coherence of the rationale, and the decided tier is parsed back out for deterministic settlement. Live party-attributed telemetry endpoints served from two independent public CDNs.",
   "public_methods": {
     "views": [
       "get_protocol_overview",
@@ -36,18 +36,25 @@
       "recover_bond",
       "withdraw_collateral"
     ],
-    "new_in_this_revision": ["transfer_governor"],
+    "new_in_this_revision": [],
     "count": "23 (11 view, 12 write)"
   },
   "verification": {
-    "tests": "tests/direct/ passes in full; genvm-lint check reports 0 errors (lint + SDK validation, 23 methods).",
-    "note": "This record pins the freshly deployed audited-V3 address on GenLayer Studio Next. The source hash above is the repository revision it was deployed from. On-chain state for this address is not transcribed here: a fresh deployment starts empty (get_enclave_count == 0), and the populated demonstration state is reached by running the agent scripts against it (.venv/bin/python -m agent.demo, then .venv/bin/python -m agent.seed; agent/chain.py points here). The predecessor record below carries a real, previously-transcribed populated snapshot as history."
+    "tests": "tests/direct/ passes in full (69 tests); agent/ passes (24 tests); genvm-lint check reports 0 errors (lint + SDK validation, 23 methods).",
+    "note": "This record pins the freshly deployed audited-V4 address on GenLayer Studio Next. The source hash above is the repository revision it was deployed from. On-chain state for this address is not transcribed here: a fresh deployment starts empty (get_enclave_count == 0), and the populated demonstration state is reached by running the agent scripts against it (.venv/bin/python -m agent.demo, then .venv/bin/python -m agent.seed; agent/chain.py points here). The predecessor chain below carries a real, previously-transcribed populated snapshot as history."
   },
   "predecessors": [
     {
+      "contract_address": "0x126d145Edcb422E94a3202dFa5c983C8DC5374d9",
+      "explorer_url": "https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9",
+      "status": "superseded by the audited-V4 revision; still live and readable on chain",
+      "revision": "V3 (audited): semantic multi-LLM adjudication with on-chain evidence reads, party-attributed telemetry ({party_a, party_b}), FEED_CONFLICT neutral resolution, independent per-party elevated slash flags, dual independent-host oracle requirement, SSRF hardening, and governor rotation (transfer_governor). Predates the V4 prompt-injection isolation, telemetry bounding corridors, and rationale-carrying equivalence round.",
+      "note": "Freshly deployed and left empty (get_enclave_count == 0); the populated demonstration state was reproduced on the V3.1 predecessor below."
+    },
+    {
       "contract_address": "0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41",
       "explorer_url": "https://explorer-studio-dev.genlayer.com/address/0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41",
-      "status": "superseded by the audited-V3 revision; still live and readable on chain",
+      "status": "superseded; still live and readable on chain",
       "revision": "V3.1: enumerable enclave roster index (get_enclave_count, get_enclave_by_index), cancel_proposal bounded-liveness path, claim_payout fund-safety guard, bytes/str telemetry-body resilience. Predates the semantic-adjudication / party-attributed-telemetry / FEED_CONFLICT / per-party-elevated-flag / transfer_governor hardening.",
       "observed_at_populated_head": {
         "note": "Read from the chain after agent.demo and agent.seed were run against this address. Preserved here as history.",
@@ -85,5 +92,5 @@
       "status": "earliest recorded deployment; retired from the repository, still live and readable on chain"
     }
   ],
-  "supersedes": "0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41 (V3.1), and before it 0xB78A41624fe09163fee3159091E907B7b7Af9D00 and 0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3, carried above as history rather than as the live target."
+  "supersedes": "0x126d145Edcb422E94a3202dFa5c983C8DC5374d9 (V3 audited), and before it 0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41 (V3.1), 0xB78A41624fe09163fee3159091E907B7b7Af9D00 and 0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3, carried above as history rather than as the live target."
 }

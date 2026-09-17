@@ -9,6 +9,7 @@ Pure-ASCII. Direct mode executes the leader function only.
 
 from conftest import (
     CONTRACT,
+    ATTO,
     BOND,
     MIN_DISPUTE,
     khex,
@@ -21,6 +22,8 @@ from conftest import (
     mock_party_telemetry,
     mock_verdict,
 )
+
+VALIDATION_FEE = 5 * ATTO
 
 
 # --- 1: party-specific telemetry kills the race to courthouse ---------------
@@ -109,18 +112,19 @@ def test_independent_elevated_flags_per_party(direct_vm, direct_deploy, direct_a
     assert t2["status"] == "ACTIVE"
 
 
-# --- Tribunal trusted: verdict is not overridden when telemetry is present --
-def test_tribunal_malicious_report_trusted(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """With telemetry present the code backstop stands down and the tribunal's
-    verdict is trusted. A MALICIOUS_REPORT finding therefore stands: the
-    frivolous plaintiff is slashed, not the defendant."""
+# --- V4 floor: high objective telemetry can never be ruled MALICIOUS ---------
+def test_high_telemetry_malicious_floored_to_normal(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """V4 floor protection for honest plaintiffs: at bps >= 7500 a clear objective
+    breach can never be dismissed as MALICIOUS_REPORT. If the model attempts it,
+    the verdict floors to NORMAL, so a plaintiff reporting a real high-telemetry
+    breach never loses its whole bond to a bad-faith or hallucinated dismissal."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
     alice = khex(c, direct_vm, direct_alice)
     bob = khex(c, direct_vm, direct_bob)
     reserves0 = int(c.get_protocol_overview()["reserves"])
 
-    mock_telemetry(direct_vm, 0.9)  # non-zero -> backstop does not fire
+    mock_telemetry(direct_vm, 0.9)  # 9000 bps -> objective breach
     mock_verdict(direct_vm, "MALICIOUS_REPORT")
 
     direct_vm.sender = direct_alice
@@ -128,10 +132,11 @@ def test_tribunal_malicious_report_trusted(direct_vm, direct_deploy, direct_alic
     verdict = c.trigger_dispute(tid, "x", "ipfs://e", "hmc1")
     direct_vm.value = 0
 
-    assert verdict == "MALICIOUS_REPORT"
-    # Plaintiff's whole dispute bond is slashed to reserves; defendant untouched.
-    assert int(c.get_protocol_overview()["reserves"]) == reserves0 + MIN_DISPUTE
-    assert int(c.claimable_of(alice)) == 0
+    # Floored to NORMAL: the plaintiff is NOT slashed for a total bond loss; only
+    # the standard validation fee is taken, and the defendant is untouched.
+    assert verdict == "NORMAL"
+    assert int(c.get_protocol_overview()["reserves"]) == reserves0 + VALIDATION_FEE
+    assert int(c.claimable_of(alice)) == MIN_DISPUTE - VALIDATION_FEE
     assert c.get_enclave(bob)["status"] == "ACTIVE"
 
 

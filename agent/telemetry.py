@@ -1,35 +1,40 @@
-"""Deterministic, party-attributed telemetry oracles.
+"""Deterministic, party-attributed telemetry oracles served over the public web.
 
 A treaty's oracle URLs are its evidence, and every validator in a GenLayer
-consensus round fetches those URLs independently. A live price feed answers two
-validators at two different instants, so their readings -- and therefore their
-breach verdicts -- can disagree; a rate-limited feed turns the whole round into
-``[TRANSIENT]`` and the dispute reverts. Neither failure is a property of the
-treaty, and neither says anything about the allegation.
-
-Two invariants shape these feeds:
+consensus round fetches those URLs independently via ``gl.nondet.web.get``. Two
+invariants shape these feeds:
 
 * Party attribution. Each payload reports a metric PER PARTY
-  (``{"party_a": .., "party_b": ..}``), so adjudication reads only the
-  defendant's own breach. A metric describing party_a can never be used BY
-  party_a to slash party_b (no "race to courthouse").
-* Independent hosts. The contract requires the primary and secondary oracles to
-  live on distinct hostnames, so the duet's evidence is served from two separate
-  feeds rather than two paths on one host.
+  (``{"party_a": ..., "party_b": ...}``), so adjudication reads only the
+  defendant's own breach -- a metric describing party_a can never be used BY
+  party_a to slash party_b (no race to courthouse).
+* Reachable, independent hosts. The feeds must actually resolve on the public
+  web (an unresolvable host makes ``gl.nondet.web.get`` raise a transient error
+  and the dispute reverts), and the contract requires the two oracles to be on
+  DISTINCT hostnames. Both conditions are met by serving static JSON committed to
+  this repository under ``telemetry/*.json`` from two independent public CDNs:
 
-The payload is base64-encoded into the path so the URL string is deterministic
-and self-describing: every fetcher receives byte-identical evidence, and the
-verdict turns on the part GenLayer actually contributes -- the arbitration and
-its equivalence round. The metric is quantized contract-side (``_quantize_bps``)
-into integer basis points, so the LLM sees a stable integer either way.
+    - primary   -> raw.githubusercontent.com   (GitHub raw)
+    - secondary -> cdn.jsdelivr.net             (jsDelivr GitHub CDN)
+
+  Both answer HTTP 200 with a body such as
+  ``{"party_a": 0.0, "party_b": 0.88, "contradiction": false}``. Because both
+  CDNs serve the SAME committed file, every validator receives byte-identical
+  evidence; the verdict then turns on the arbitration, not on which validator
+  fetched first.
+
+The metric is quantized contract-side (``_quantize_bps``) into integer basis
+points, so the LLM sees a stable integer either way.
 """
 
-import base64
-import json
+# GitHub repository the static telemetry documents are committed to.
+_REPO = "moltaphet/westphalia"
+_BRANCH = "main"
 
-# Two INDEPENDENT feed hosts (the contract requires distinct hostnames).
-PRIMARY_HOST = "telemetry-primary.westphalia.io"
-SECONDARY_HOST = "telemetry-secondary.westphalia.io"
+# Two INDEPENDENT, publicly reachable feed hosts (the contract requires distinct
+# hostnames; both serve the same committed telemetry/*.json).
+PRIMARY_HOST = "raw.githubusercontent.com"
+SECONDARY_HOST = "cdn.jsdelivr.net"
 
 # Breach thresholds mirrored from the contract, for readable rationale strings.
 BPS_CRITICAL = 7500
@@ -37,12 +42,14 @@ BPS_ELEVATED = 2500
 DIVERGENCE_BPS = 500
 
 
-def feed_url(host: str, party_a: float, party_b: float) -> str:
-    """A URL whose body is exactly ``{"party_a": <a>, "party_b": <b>}`` for every
-    fetcher, base64-encoded into the path so the URL is deterministic."""
-    payload = json.dumps({"party_a": party_a, "party_b": party_b}, sort_keys=True)
-    token = base64.b64encode(payload.encode()).decode()
-    return f"https://{host}/metrics/{token}"
+def _primary_url(path: str) -> str:
+    """A GitHub raw URL for a committed telemetry document."""
+    return f"https://{PRIMARY_HOST}/{_REPO}/{_BRANCH}/{path}"
+
+
+def _secondary_url(path: str) -> str:
+    """A jsDelivr GitHub-CDN URL for the same committed document, on a distinct host."""
+    return f"https://{SECONDARY_HOST}/gh/{_REPO}@{_BRANCH}/{path}"
 
 
 def bps_of(breach_metric: float) -> int:
@@ -50,34 +57,35 @@ def bps_of(breach_metric: float) -> int:
     return max(0, min(10000, int(round(breach_metric * 10000.0))))
 
 
-# The duet's declared evidence. party_b is the defendant on trial: the breach is
-# attributed to party_b, party_a stays clean. The two feeds agree well inside
-# the contract's 500 bps divergence budget, and party_b's mean sits above the
-# 7500 bps critical threshold -- so the arbitration has one defensible answer.
-CLEAN_PARTY = 0.00
-BREACH_PRIMARY_B = 0.80
-BREACH_SECONDARY_B = 0.78
+# The duet's declared evidence. party_b is the defendant on trial. The two feeds
+# of each pair agree well inside the 500 bps divergence budget; the breach pair's
+# party_b mean sits above the 7500 bps critical threshold and the calm pair's
+# below the 2500 bps elevated threshold.
 BREACH_FEEDS = (
-    feed_url(PRIMARY_HOST, CLEAN_PARTY, BREACH_PRIMARY_B),
-    feed_url(SECONDARY_HOST, CLEAN_PARTY, BREACH_SECONDARY_B),
+    _primary_url("telemetry/breach_primary.json"),
+    _secondary_url("telemetry/breach_secondary.json"),
+)
+CALM_FEEDS = (
+    _primary_url("telemetry/calm_primary.json"),
+    _secondary_url("telemetry/calm_secondary.json"),
 )
 
-# The counterfactual pair: identical machinery, party_b well under the elevated
-# threshold. A court that returns NORMAL here is reading its evidence.
-CALM_PRIMARY_B = 0.05
-CALM_SECONDARY_B = 0.04
-CALM_FEEDS = (
-    feed_url(PRIMARY_HOST, CLEAN_PARTY, CALM_PRIMARY_B),
-    feed_url(SECONDARY_HOST, CLEAN_PARTY, CALM_SECONDARY_B),
-)
+# The party-attributed metric each feed reports, mirroring the committed JSON.
+# The feeds are static documents (not self-describing URLs), so narration and
+# tests read the metric from here rather than decoding it from the URL. Keep in
+# sync with telemetry/*.json.
+_FEED_METRICS = {
+    BREACH_FEEDS[0]: {"party_a": 0.0, "party_b": 0.80},
+    BREACH_FEEDS[1]: {"party_a": 0.0, "party_b": 0.78},
+    CALM_FEEDS[0]: {"party_a": 0.0, "party_b": 0.05},
+    CALM_FEEDS[1]: {"party_a": 0.0, "party_b": 0.04},
+}
 
 
 def agreed_bps(feeds: tuple[str, str], target_role: str = "party_b") -> int:
     """The conservative mean bps the contract derives for the DEFENDANT
-    (``target_role``) from an agreeing pair."""
-    metrics = []
-    for url in feeds:
-        token = url.rsplit("/", 1)[-1]
-        data = json.loads(base64.b64decode(token).decode())
-        metrics.append(data[target_role])
-    return sum(bps_of(m) for m in metrics) // len(metrics)
+    (``target_role``) from an agreeing pair, read from the committed feed values."""
+    vals = [_FEED_METRICS[u][target_role] for u in feeds if u in _FEED_METRICS]
+    if not vals:
+        return 0
+    return sum(bps_of(v) for v in vals) // len(vals)

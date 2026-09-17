@@ -7,8 +7,8 @@ the breach pair lands where the demo claims it does -- agreeing well inside the
 divergence budget, and above the critical threshold.
 """
 
-import base64
 import json
+import os
 
 from agent.decider import HeuristicDecider
 from agent.profiles import ALICE, BOB
@@ -20,7 +20,6 @@ from agent.telemetry import (
     SECONDARY_HOST,
     agreed_bps,
     bps_of,
-    feed_url,
 )
 
 # Mirrored from contracts/westphalia.py. The contract is the authority; these
@@ -31,17 +30,40 @@ BPS_ELEVATED = 2500
 
 PEER = {"name": "Halcyon", "archetype": "Autonomous Arbiter", "reputation": "50"}
 
+_TELEMETRY_DIR = os.path.join(os.path.dirname(__file__), "..", "telemetry")
 
-def test_feed_is_byte_identical_for_every_fetcher():
-    url = feed_url(PRIMARY_HOST, 0.0, 0.80)
-    assert feed_url(PRIMARY_HOST, 0.0, 0.80) == url, "same metrics -> same URL"
-    body = base64.b64decode(url.rsplit("/", 1)[-1])
-    assert json.loads(body) == {"party_a": 0.0, "party_b": 0.80}
+
+def test_feeds_are_reachable_https_documents():
+    """Every feed is an https URL pointing at a committed telemetry/*.json
+    document (so gl.nondet.web.get resolves it on the public web), one per host."""
+    for url in BREACH_FEEDS + CALM_FEEDS:
+        assert url.startswith("https://")
+        assert url.endswith(".json")
+        assert "/telemetry/" in url
+    assert BREACH_FEEDS[0].startswith(f"https://{PRIMARY_HOST}/")
+    assert BREACH_FEEDS[1].startswith(f"https://{SECONDARY_HOST}/")
+    assert CALM_FEEDS[0].startswith(f"https://{PRIMARY_HOST}/")
+    assert CALM_FEEDS[1].startswith(f"https://{SECONDARY_HOST}/")
+
+
+def test_committed_documents_match_declared_metrics():
+    """The static JSON served at each feed matches the party-attributed metric the
+    module declares (guards drift between telemetry/*.json and the demo)."""
+    cases = {
+        "breach_primary.json": 0.80,
+        "breach_secondary.json": 0.78,
+        "calm_primary.json": 0.05,
+        "calm_secondary.json": 0.04,
+    }
+    for fname, party_b in cases.items():
+        with open(os.path.join(_TELEMETRY_DIR, fname)) as fh:
+            doc = json.load(fh)
+        assert "party_a" in doc
+        assert doc["party_b"] == party_b
+        assert doc["contradiction"] is False
 
 
 def test_feeds_are_on_independent_trusted_hosts():
-    assert BREACH_FEEDS[0].startswith(f"https://{PRIMARY_HOST}/")
-    assert BREACH_FEEDS[1].startswith(f"https://{SECONDARY_HOST}/")
     assert PRIMARY_HOST != SECONDARY_HOST
     for host in (PRIMARY_HOST, SECONDARY_HOST):
         assert host in ALICE.trusted_oracle_hosts

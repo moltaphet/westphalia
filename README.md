@@ -7,14 +7,14 @@ rendered as an interactive 3D voxel war room.
 
 ![Network: GenLayer Studio Next](https://img.shields.io/badge/network-GenLayer%20Studio%20Next-00E5FF)
 ![Chain ID: 61997](https://img.shields.io/badge/chain%20id-61997-7c3aed)
-![Contract: 0x126d..74d9](https://img.shields.io/badge/contract-0x126d..74d9-00FFA3)
+![Contract: 0xa92E..eBED](https://img.shields.io/badge/contract-0xa92E..eBED-00FFA3)
 ![Direct tests: 65 passing](https://img.shields.io/badge/direct%20tests-65%20passing-2ea043)
 ![genvm-lint: clean](https://img.shields.io/badge/genvm--lint-clean-2ea043)
 ![Runner: py-genlayer v0.3.0](https://img.shields.io/badge/runner-py--genlayer%20v0.3.0-333)
 
 | | |
 |---|---|
-| **Live contract** | [`0x126d145Edcb422E94a3202dFa5c983C8DC5374d9`](https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9) |
+| **Live contract** | [`0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`](https://explorer-studio-next.genlayer.com/address/0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED) |
 | **Network** | GenLayer Studio Next, chain 61997 |
 | **RPC** | `https://studio-next.genlayer.com/api` |
 | **Explorer** | https://explorer-studio-next.genlayer.com |
@@ -950,7 +950,7 @@ the dispute.
 ### Verify the deployment on the explorer
 
 Contract:
-[`0x126d145Edcb422E94a3202dFa5c983C8DC5374d9`](https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9)
+[`0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`](https://explorer-studio-next.genlayer.com/address/0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED)
 on GenLayer Studio Next (chain 61997).
 
 GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live
@@ -1291,13 +1291,13 @@ not a loud one.
 | Field | Value |
 |---|---|
 | Network | GenLayer Studio Next, chain 61997 |
-| Contract | `0x126d145Edcb422E94a3202dFa5c983C8DC5374d9` |
-| Explorer | https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9 |
+| Contract | `0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED` |
+| Explorer | https://explorer-studio-next.genlayer.com/address/0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED |
 | RPC | `https://studio-next.genlayer.com/api` |
 | Runner | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
 | Source | `contracts/westphalia.py` |
-| Revision | V3 (audited) -- semantic multi-LLM adjudication with on-chain evidence reads, party-attributed telemetry, `FEED_CONFLICT` neutral resolution, independent per-party elevated flags, dual independent-host oracles, SSRF hardening, and governor rotation (`transfer_governor`). Supersedes V3.1 (`0x231f...2e41`). |
-| Source SHA-256 | `868c346c64a077ef2db6d72e4b1fc14f243acd264c8de24b527025c9b323bcfa` |
+| Revision | V4 (audited) -- prompt-injection isolation (`=== N ===` headers, `<untrusted_evidence_data>` / `<covenant_terms>` tags, hard security directive), ground-truth telemetry bounding corridors (no full sanction below 2500 bps, no MALICIOUS dismissal at/above 7500 bps), semantic multi-LLM adjudication carrying the judicial rationale through the equivalence round, and live party-attributed telemetry endpoints. Builds on the V3 audited base; supersedes V3 (`0x126d...74d9`). |
+| Source SHA-256 | `26afa0ad7973b0c367ed717faf58af5aa0d11a19098d65e605f707fe5c02f1b9` |
 
 Full observed state, at deploy time and at the current head, is recorded in
 [`deployments/studio-dev.json`](deployments/studio-dev.json). That file is the
