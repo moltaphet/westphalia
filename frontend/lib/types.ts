@@ -148,6 +148,22 @@ export interface LedgerEvent {
   audit?: ConsensusAudit;
 }
 
+// A tribunal ruling captured when a dispute resolves. The contract adjudicates
+// via a multi-LLM equivalence round and returns a categorical `tier`; the
+// `rationale` is the natural-language judicial reasoning surfaced for the demo.
+// Persisted to localStorage so the Consensus Tribunal tab can replay past cases.
+export interface VerdictRecord {
+  id: string;
+  treatyId: string;
+  plaintiff: string; // enclave id (the disputing party / victim)
+  defendant: string; // enclave id (the party on trial)
+  tier: string; // CRITICAL_BREACH | ELEVATED_RISK | NORMAL | MALICIOUS_REPORT | FEED_CONFLICT
+  rationale: string; // multi-LLM judicial reasoning (evidence + covenant assessment)
+  restitutionGen: number; // GEN transferred to the plaintiff (0 when none)
+  evidenceUri: string;
+  timestamp: number; // epoch ms when the ruling was recorded
+}
+
 // A single stage in the tactical transaction pipeline overlay.
 export interface PipelineState {
   active: boolean;

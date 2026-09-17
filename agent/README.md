@@ -223,7 +223,7 @@ seventh, and nothing is ever submitted twice.
 
 ## On-chain interface used
 
-Contract `0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41` on studio-dev (chain 61997).
+Contract `0x126d145Edcb422E94a3202dFa5c983C8DC5374d9` on GenLayer Studio Next (chain 61997).
 
 - views: `get_protocol_overview`, `get_enclave`, `get_enclave_count`,
   `get_enclave_by_index`, `get_treaty`, `required_dispute_bond`, `claimable_of`

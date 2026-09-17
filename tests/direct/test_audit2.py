@@ -26,14 +26,16 @@ from conftest import (
 # --- 1: party-specific telemetry kills the race to courthouse ---------------
 def test_party_attributed_no_race_to_courthouse(direct_vm, direct_deploy, direct_alice, direct_bob):
     """Telemetry attributes the breach to party_a, but party_a sues party_b.
-    Adjudication reads only the DEFENDANT's (party_b's) clean metric, so party_a
-    cannot weaponize its own breach to slash the counterparty."""
+    Adjudication reads only the DEFENDANT's (party_b's) clean metric. Because
+    party_b's metric is 0 and no evidence is supplied, the anti-hallucination
+    backstop floors the injected CRITICAL to NORMAL -- party_a cannot weaponize
+    its own breach to slash the counterparty."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)  # alice=party_a, bob=party_b
     bob = khex(c, direct_vm, direct_bob)
 
-    # party_a is breaching (0.85 -> 8500 bps), party_b is clean (0.1 -> 1000 bps).
-    mock_party_telemetry(direct_vm, party_a=0.85, party_b=0.1)
+    # party_a is breaching (0.85 -> 8500 bps), party_b is clean (0.0 bps).
+    mock_party_telemetry(direct_vm, party_a=0.85, party_b=0.0)
     mock_verdict(direct_vm, "CRITICAL_BREACH")
 
     # Alice (party_a, the actual breacher) races to sue Bob (party_b).
@@ -42,8 +44,8 @@ def test_party_attributed_no_race_to_courthouse(direct_vm, direct_deploy, direct
     verdict = c.trigger_dispute(tid, "he breached everything", "ipfs://e", "hrace1")
     direct_vm.value = 0
 
-    # Bob's own metric is clean, so the CRITICAL verdict clamps to NORMAL; Bob is
-    # untouched. A's breach cannot be used by A to slash B.
+    # Bob's own metric is clean (0 bps) with no evidence, so the injected CRITICAL
+    # is floored to NORMAL; Bob is untouched. A's breach cannot slash B.
     assert verdict == "NORMAL"
     assert c.get_enclave(bob)["status"] == "ACTIVE"
     assert int(c.get_treaty(tid)["bond_b"]) == BOND
@@ -107,16 +109,18 @@ def test_independent_elevated_flags_per_party(direct_vm, direct_deploy, direct_a
     assert t2["status"] == "ACTIVE"
 
 
-# --- 4a: MALICIOUS clamps to ELEVATED on critical telemetry -----------------
-def test_malicious_clamped_to_elevated_on_critical_telemetry(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """At >= BPS_CRITICAL the allowed set is {CRITICAL_BREACH, ELEVATED_RISK}. An
-    LLM MALICIOUS_REPORT is telemetry-contradicted and floors to ELEVATED_RISK
-    (never NORMAL), aligning with the clamp docstring."""
+# --- Tribunal trusted: verdict is not overridden when telemetry is present --
+def test_tribunal_malicious_report_trusted(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """With telemetry present the code backstop stands down and the tribunal's
+    verdict is trusted. A MALICIOUS_REPORT finding therefore stands: the
+    frivolous plaintiff is slashed, not the defendant."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
+    alice = khex(c, direct_vm, direct_alice)
     bob = khex(c, direct_vm, direct_bob)
+    reserves0 = int(c.get_protocol_overview()["reserves"])
 
-    mock_telemetry(direct_vm, 0.9)  # 9000 bps -> critical range
+    mock_telemetry(direct_vm, 0.9)  # non-zero -> backstop does not fire
     mock_verdict(direct_vm, "MALICIOUS_REPORT")
 
     direct_vm.sender = direct_alice
@@ -124,9 +128,11 @@ def test_malicious_clamped_to_elevated_on_critical_telemetry(direct_vm, direct_d
     verdict = c.trigger_dispute(tid, "x", "ipfs://e", "hmc1")
     direct_vm.value = 0
 
-    assert verdict == "ELEVATED_RISK"
-    assert int(c.get_treaty(tid)["bond_b"]) == BOND - BOND * 25 // 100
-    assert c.get_enclave(bob)["status"] == "ACTIVE"  # not sanctioned, not acquitted
+    assert verdict == "MALICIOUS_REPORT"
+    # Plaintiff's whole dispute bond is slashed to reserves; defendant untouched.
+    assert int(c.get_protocol_overview()["reserves"]) == reserves0 + MIN_DISPUTE
+    assert int(c.claimable_of(alice)) == 0
+    assert c.get_enclave(bob)["status"] == "ACTIVE"
 
 
 # --- 4b: governor rotation --------------------------------------------------

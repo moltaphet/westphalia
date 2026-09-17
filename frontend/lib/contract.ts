@@ -180,6 +180,14 @@ export const DIPLOMATIC_ABI: AbiEntry[] = [
     outputs: [{ name: "amount", type: "string" }],
   },
   {
+    // Governor-only rotation of the treasury steward (rejects the zero address).
+    type: "function",
+    name: "transfer_governor",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "new_governor_hex", type: "string" }],
+    outputs: [],
+  },
+  {
     type: "function",
     name: "trigger_dispute",
     stateMutability: "payable",

@@ -14,7 +14,14 @@ import type {
   StateSource,
   Treaty,
   TreatyKind,
+  VerdictRecord,
 } from "./types";
+import {
+  synthesizeVerdict,
+  auditFromVerdict,
+  loadTribunalHistory,
+  saveTribunalHistory,
+} from "./verdict";
 import { TREATIES, LEDGER } from "./mockData";
 import { DEFAULT_NETWORK } from "./networks";
 import {
@@ -263,6 +270,11 @@ export function useWestphaliaStore() {
   const [treaties, setTreaties] = useState<Treaty[]>([]);
   const [ledger, setLedger] = useState<LedgerEvent[]>([]);
 
+  // Latest tribunal ruling (drives the post-dispute verdict modal) and the
+  // persistent history of past rulings (drives the Consensus Tribunal tab).
+  const [latestVerdict, setLatestVerdict] = useState<VerdictRecord | null>(null);
+  const [tribunalHistory, setTribunalHistory] = useState<VerdictRecord[]>([]);
+
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTreaty, setSelectedTreaty] = useState<string | null>(null);
@@ -478,6 +490,13 @@ export function useWestphaliaStore() {
     setLedger(cached.ledger);
     setSelectedId((prev) => prev ?? cached.enclaves[0]?.id ?? null);
     setStateSource(cached.enclaves.length > 0 ? "live" : "empty");
+  }, []);
+
+  // Replay past tribunal rulings from localStorage on mount so the Consensus
+  // Tribunal tab shows historical cases across sessions. Client-only.
+  useEffect(() => {
+    const past = loadTribunalHistory();
+    if (past.length > 0) setTribunalHistory(past);
   }, []);
 
   // Hydrate the board from the deployed contract on mount, and re-read whenever
@@ -966,32 +985,81 @@ export function useWestphaliaStore() {
           bond
         );
         setLastReceipt(receipt);
-        setTreaties((prev) =>
-          prev.map((x) =>
-            x.id === treatyId
-              ? {
-                  ...x,
-                  status: "pending",
-                  dispute: {
-                    validators: 5,
-                    consensus: 50,
-                    evidenceUri: evidence,
-                    openedBlock: 1843000 + seq,
-                  },
-                }
-              : x
-          )
-        );
+
+        // Resolve plaintiff / defendant from the treaty parties. The acting
+        // enclave (selected) is the plaintiff; the counterparty is the defendant.
+        const parties: string[] = t?.parties ?? [];
+        const plaintiff =
+          selectedId && parties.includes(selectedId) ? selectedId : parties[0] ?? "protocol";
+        const defendant = parties.find((p) => p !== plaintiff) ?? parties[1] ?? "protocol";
+        const nameOf = (id: string) =>
+          enclaves.find((e) => e.id === id)?.name ?? id;
+        const evidenceUri = `ipfs://evidence/${treatyId}`;
+
         pushLedger({
           block: 1843000 + seq,
           kind: "dispute-opened",
-          actor: selectedId ?? "protocol",
-          message: `Dispute opened on ${treatyId.toUpperCase()}. GenLayer validators empaneled.`,
+          actor: plaintiff,
+          message: `Dispute opened on ${treatyId.toUpperCase()}. GenLayer multi-LLM tribunal empaneled.`,
         });
+
+        // The multi-LLM equivalence round returns a categorical tier; reconstruct
+        // the judicial ruling (tier + rationale + restitution) for the UI.
+        const verdict = t
+          ? synthesizeVerdict({
+              treaty: t,
+              plaintiff,
+              defendant,
+              defendantName: nameOf(defendant),
+              evidenceUri,
+            })
+          : null;
+
+        if (verdict && t) {
+          setLatestVerdict(verdict);
+          setTribunalHistory((prev) => {
+            const next = [verdict, ...prev].slice(0, 40);
+            saveTribunalHistory(next);
+            return next;
+          });
+          const breach = verdict.tier === "CRITICAL_BREACH" || verdict.tier === "ELEVATED_RISK";
+          // Reflect the outcome on the treaty and record the consensus verdict in
+          // the ledger, with the full audit so the Tribunal courtroom lights up.
+          setTreaties((prev) =>
+            prev.map((x) =>
+              x.id === treatyId
+                ? {
+                    ...x,
+                    status: verdict.tier === "CRITICAL_BREACH" ? "breached" : "active",
+                    dispute: {
+                      validators: 3,
+                      consensus: breach ? 100 : 66,
+                      evidenceUri,
+                      openedBlock: 1843000 + seq,
+                    },
+                  }
+                : x
+            )
+          );
+          pushLedger({
+            block: 1843000 + seq,
+            kind: breach ? "territory-slashed" : "consensus-verdict",
+            actor: plaintiff,
+            valueGen: verdict.restitutionGen || undefined,
+            message: `Tribunal verdict on ${treatyId.toUpperCase()}: ${verdict.tier}. ${
+              verdict.restitutionGen > 0
+                ? `${verdict.restitutionGen.toLocaleString("en-US")} GEN restitution to ${nameOf(plaintiff)}.`
+                : "No restitution."
+            }`,
+            audit: auditFromVerdict(verdict, t, nameOf(plaintiff), nameOf(defendant)),
+          });
+        }
       });
     },
-    [runPipeline, pushLedger, selectedId, treaties]
+    [runPipeline, pushLedger, selectedId, treaties, enclaves]
   );
+
+  const dismissVerdict = useCallback(() => setLatestVerdict(null), []);
 
   const claimEscrow = useCallback(
     async (treatyId: string) => {
@@ -1095,6 +1163,9 @@ export function useWestphaliaStore() {
     enclaves,
     treaties,
     ledger,
+    latestVerdict,
+    tribunalHistory,
+    dismissVerdict,
     hoveredId,
     selectedId,
     selectedTreaty,

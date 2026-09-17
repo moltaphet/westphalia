@@ -5,6 +5,7 @@ import {
   Activity,
   ArrowRight,
   Check,
+  ChevronDown,
   Copy,
   Cpu,
   Gavel,
@@ -21,9 +22,11 @@ import type {
   Treaty,
   TreatyStatus,
   ValidatorVote,
+  VerdictRecord,
 } from "@/lib/types";
 import { auditForEvent } from "@/lib/mockData";
 import { KIND_COLOR } from "@/lib/board";
+import { tierMeta } from "@/lib/verdict";
 
 const CASE_KINDS = ["dispute-opened", "territory-slashed", "consensus-verdict"];
 
@@ -86,7 +89,74 @@ function covenantStatusClass(status: TreatyStatus): string {
   }
 }
 
-export default function TribunalView({ state }: { state: ProtocolState }) {
+// A persistent tribunal ruling with its multi-LLM judicial reasoning expandable
+// inline: tier badge, case parties, date, restitution, and the full rationale.
+function RulingRow({
+  verdict,
+  nameOf,
+}: {
+  verdict: VerdictRecord;
+  nameOf: (id: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const meta = tierMeta(verdict.tier);
+  const when = new Date(verdict.timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return (
+    <div className="rounded border bg-zinc-950/50" style={{ borderColor: meta.border }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition hover:bg-zinc-900/40"
+      >
+        <span
+          className="shrink-0 rounded border px-1.5 py-0.5 text-[8px] font-bold tracking-widest"
+          style={{ color: meta.color, borderColor: meta.border, backgroundColor: meta.bg }}
+        >
+          {meta.short}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[10px] font-bold text-slate-200">
+            {verdict.treatyId.toUpperCase()} &middot; {nameOf(verdict.plaintiff)} v{" "}
+            {nameOf(verdict.defendant)}
+          </span>
+          <span className="block text-[8px] tracking-widest text-slate-500">{when}</span>
+        </span>
+        {verdict.restitutionGen > 0 && (
+          <span className="shrink-0 text-[9px] tabular-nums" style={{ color: meta.color }}>
+            {verdict.restitutionGen.toLocaleString("en-US")} GEN
+          </span>
+        )}
+        <ChevronDown
+          size={12}
+          className={`shrink-0 text-slate-500 transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div
+          className="border-t px-2.5 py-2 font-mono text-[10px] leading-relaxed text-[#a5f3fc]"
+          style={{ borderColor: meta.border }}
+        >
+          {verdict.rationale}
+          <div className="mt-1.5 text-[8px] tracking-widest text-slate-600">
+            EVIDENCE: {verdict.evidenceUri}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function TribunalView({
+  state,
+  history = [],
+}: {
+  state: ProtocolState;
+  history?: VerdictRecord[];
+}) {
   const cases = useMemo(
     () => state.ledger.filter((e) => CASE_KINDS.includes(e.kind)),
     [state.ledger]
@@ -149,6 +219,22 @@ export default function TribunalView({ state }: { state: ProtocolState }) {
             {cases.length === 0 && (
               <span className="rounded border border-zinc-800/60 bg-zinc-900/40 px-3 py-2 text-[10px] text-slate-600">
                 No active tribunal cases.
+              </span>
+            )}
+          </div>
+
+          {/* Persistent tribunal rulings (localStorage-backed), each with the
+              full multi-LLM judicial reasoning expandable inline. */}
+          <div className="flex flex-col gap-1.5 border-t border-zinc-900 p-3">
+            <div className="text-[8px] font-bold tracking-[0.2em] text-slate-500">
+              TRIBUNAL RULINGS ({history.length})
+            </div>
+            {history.map((v) => (
+              <RulingRow key={v.id} verdict={v} nameOf={nameOf} />
+            ))}
+            {history.length === 0 && (
+              <span className="rounded border border-zinc-800/60 bg-zinc-900/40 px-3 py-2 text-[10px] text-slate-600">
+                No rulings yet. Open a dispute to convene the tribunal.
               </span>
             )}
           </div>

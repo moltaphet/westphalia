@@ -24,6 +24,8 @@ from conftest import (
     found,
     propose,
     mock_telemetry,
+    party_telemetry,
+    mock_evidence,
     mock_verdict,
     params_for,
 )
@@ -32,16 +34,17 @@ VALIDATION_FEE = 5 * ATTO
 EXIT_NOTICE_PERIOD = 3 * 24 * 3600
 
 
-# --- Bug 1: LLM verdict bound to telemetry ----------------------------------
-def test_llm_breach_clamped_when_telemetry_normal(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """On spotless (0 bps) telemetry an LLM hallucination / prompt injection that
-    returns CRITICAL_BREACH must be clamped to NORMAL, so an innocent defendant
-    is never slashed on normal telemetry."""
+# --- Anti-hallucination backstop (narrow: 0 bps AND no evidence) ------------
+def test_injected_breach_clamped_when_no_telemetry_no_evidence(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """The backstop's one job: on spotless (0 bps) telemetry AND with no external
+    evidence document, an injected / hallucinated CRITICAL_BREACH is rejected and
+    floored to NORMAL, so an innocent defendant is never slashed out of thin air.
+    (The ipfs evidence URI is not web-fetchable -> no evidence body.)"""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
     bob = khex(c, direct_vm, direct_bob)
 
-    mock_telemetry(direct_vm, 0.0)  # 0 bps -> normal range
+    mock_telemetry(direct_vm, 0.0)  # 0 bps
     mock_verdict(direct_vm, "CRITICAL_BREACH")
     reserves0 = int(c.get_protocol_overview()["reserves"])
 
@@ -61,25 +64,90 @@ def test_llm_breach_clamped_when_telemetry_normal(direct_vm, direct_deploy, dire
     assert int(c.get_protocol_overview()["reserves"]) == reserves0 + VALIDATION_FEE
 
 
-def test_llm_critical_clamped_to_elevated_on_mid_telemetry(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """Mid-range telemetry (4000 bps) justifies at most ELEVATED_RISK. An LLM
-    that over-escalates to CRITICAL_BREACH is capped to ELEVATED_RISK (a 25%
-    slash), never a full sanction."""
+def test_tribunal_verdict_trusted_above_zero_telemetry(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """Once telemetry is non-zero the backstop stands down and the tribunal's
+    verdict is trusted across the spectrum -- a CRITICAL_BREACH at 4000 bps is
+    NOT clamped down, so the defendant is sanctioned. Code is a guardrail, not a
+    deterministic override of the multi-LLM judgment."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
     bob = khex(c, direct_vm, direct_bob)
 
-    mock_telemetry(direct_vm, 0.4)  # 4000 bps -> elevated range
+    mock_telemetry(direct_vm, 0.4)  # 4000 bps -> backstop does not fire
     mock_verdict(direct_vm, "CRITICAL_BREACH")
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
-    verdict = c.trigger_dispute(tid, "risk", "ipfs://e", "hclamp2")
+    verdict = c.trigger_dispute(tid, "sustained breach", "ipfs://e", "hclamp2")
     direct_vm.value = 0
 
-    assert verdict == "ELEVATED_RISK"
-    assert c.get_enclave(bob)["status"] == "ACTIVE"  # not fully sanctioned
-    assert int(c.get_treaty(tid)["bond_b"]) == BOND - BOND * 25 // 100
+    assert verdict == "CRITICAL_BREACH"
+    assert c.get_enclave(bob)["status"] == "SANCTIONED"
+
+
+# --- Semantic covenant adjudication: evidence + terms drive the verdict -----
+def test_semantic_covenant_breach_with_evidence(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """True semantic adjudication: the tribunal reads a REAL evidence document
+    on-chain and reasons over the covenant. Telemetry is a spotless 0 bps, so the
+    ONLY thing that lifts the verdict above the backstop is the incident report
+    proving a sustained SLA breach -- a direct contrast with the no-evidence
+    backstop test, where the same 0 bps + injected CRITICAL floors to NORMAL.
+    Here, evidence present -> the tribunal's CRITICAL_BREACH stands."""
+    c = direct_deploy(CONTRACT)
+    tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
+    bob = khex(c, direct_vm, direct_bob)
+
+    # Defendant (party_b) telemetry is spotless (0 bps); the two treaty oracles
+    # (on *.westphalia.io) agree so there is no feed conflict.
+    direct_vm.mock_web(r".*westphalia\.io.*", party_telemetry(0.0, 0.0))
+    # A real incident report is fetched on-chain as the evidence body (disjoint
+    # mock pattern so it never collides with the telemetry oracles).
+    incident = (
+        "# Incident Report 42\n\n"
+        "Defendant's data feed served stale snapshots for 9h11m. Measured uptime "
+        "90.9% against the covenant's agreed 99.0% floor. Root cause: an "
+        "unannounced migration with no failover; counterparties received "
+        "corrupted price data throughout the window.\n"
+    )
+    mock_evidence(direct_vm, r".*audit-log\.example.*", incident)
+    mock_verdict(
+        direct_vm,
+        "CRITICAL_BREACH",
+        rationale="Evidence proves a sustained 9h SLA breach far below the agreed uptime floor.",
+    )
+
+    direct_vm.sender = direct_alice
+    direct_vm.value = MIN_DISPUTE
+    verdict = c.trigger_dispute(
+        tid,
+        "Defendant breached the covenant's uptime SLA",
+        "https://audit-log.example/incident-42.md",
+        "hsem1",
+    )
+    direct_vm.value = 0
+
+    # The evidence-driven verdict stands (not clamped): defendant is sanctioned
+    # despite only modest telemetry -- qualitative terms + evidence decided it.
+    assert verdict == "CRITICAL_BREACH"
+    assert c.get_enclave(bob)["status"] == "SANCTIONED"
+
+
+def test_evidence_ignored_when_uri_not_web_fetchable(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """A non-web evidence URI (ipfs://, a bare hash) is not fetched, so the
+    evidence body is the NO_EVIDENCE sentinel. With 0 bps telemetry and no
+    fetchable evidence, an injected breach is still floored by the backstop."""
+    c = direct_deploy(CONTRACT)
+    tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
+    bob = khex(c, direct_vm, direct_bob)
+
+    mock_telemetry(direct_vm, 0.0)
+    mock_verdict(direct_vm, "CRITICAL_BREACH")
+
+    direct_vm.sender = direct_alice
+    direct_vm.value = MIN_DISPUTE
+    assert c.trigger_dispute(tid, "breach!", "ipfs://Qm-not-fetchable", "hev1") == "NORMAL"
+    direct_vm.value = 0
+    assert c.get_enclave(bob)["status"] == "ACTIVE"
 
 
 # --- Bug 2: neutral refund on feed conflict / unreachable feeds -------------

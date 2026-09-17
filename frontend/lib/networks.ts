@@ -1,24 +1,21 @@
 import type { NetworkConfig } from "./types";
 
-// GenLayer Studio Net targets.
+// GenLayer Studio Next targets.
 //
 // Chain 61997 is served by two RPC hostnames that answer identically (verified:
 // same eth_chainId 0xf22d, same contract state): `studio-next.genlayer.com`,
-// which the hackathon brief names, and `studio-dev.genlayer.com`, which
+// which the production brief names, and `studio-dev.genlayer.com`, which
 // genlayer-js's own bundled `studioDevnet` chain definition names. The RPC
 // default is the brief's, overridable per deployment via
-// NEXT_PUBLIC_GENLAYER_RPC_URL.
-//
-// The explorer is *not* symmetric with the RPC: the brief names
-// `explorer-studio-dev.genlayer.com` explicitly, so that is what is linked even
-// though the RPC beside it points at studio-next.
+// NEXT_PUBLIC_GENLAYER_RPC_URL. The explorer matches: the production deployment
+// is linked on `explorer-studio-next.genlayer.com`.
 export const STUDIO_DEV: NetworkConfig = {
   key: "studio-dev",
-  label: "GenLayer Studio Net",
+  label: "GenLayer Studio Next",
   chainId: 61997,
   rpcUrl:
     process.env.NEXT_PUBLIC_GENLAYER_RPC_URL ?? "https://studio-next.genlayer.com/api",
-  explorerUrl: "https://explorer-studio-dev.genlayer.com",
+  explorerUrl: "https://explorer-studio-next.genlayer.com",
 };
 
 export const STUDIO: NetworkConfig = {
@@ -42,7 +39,7 @@ export function networkByChainId(chainId: number): NetworkConfig | undefined {
 // deployment is a config change, not a code change.
 export const DIPLOMATIC_CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_DIPLOMATIC_CONTRACT_ADDRESS ??
-  "0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41";
+  "0x126d145Edcb422E94a3202dFa5c983C8DC5374d9";
 
 // A genlayer-js chain object, as viem consumes it.
 //

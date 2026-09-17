@@ -83,11 +83,21 @@ def mock_party_telemetry(direct_vm, party_a: float, party_b: float, contradictio
     direct_vm.mock_web(r".*", party_telemetry(party_a, party_b, contradiction))
 
 
-def mock_verdict(direct_vm, tier: str):
-    # Double-encoded: the harness json.loads()s the mock into a string, and
-    # the v0.3 SDK's exec_prompt(response_format="json") json.loads()s that
-    # string again to produce the dict the contract parses.
-    direct_vm.mock_llm(r".*", json.dumps(json.dumps({"verdict": tier})))
+def mock_verdict(direct_vm, tier: str, rationale: str = "Judicial reasoning for the verdict."):
+    # The tribunal returns {"verdict", "rationale"}; the contract reads the tier
+    # and the equivalence round validates the reasoning. Double-encoded: the
+    # harness json.loads()s the mock into a string, and the v0.3 SDK's
+    # exec_prompt(response_format="json") json.loads()s that string again to
+    # produce the dict the contract parses.
+    payload = {"verdict": tier, "rationale": rationale}
+    direct_vm.mock_llm(r".*", json.dumps(json.dumps(payload)))
+
+
+def mock_evidence(direct_vm, pattern: str, text: str, status: int = 200):
+    """Mock an external evidence document the contract reads on-chain via
+    gl.nondet.web.get(evidence_uri). `pattern` is a regex matched against the
+    evidence URL; keep it disjoint from the telemetry-oracle mock patterns."""
+    direct_vm.mock_web(pattern, {"status": status, "body": text})
 
 
 def fund(direct_vm, who, amount=10_000 * ATTO):

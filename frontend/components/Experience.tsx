@@ -9,6 +9,7 @@ import IntroOverlay from "./IntroOverlay";
 import TopBar from "./TopBar";
 import GlobalFeedback from "./GlobalFeedback";
 import FoundRealmModal from "./FoundRealmModal";
+import TribunalVerdictModal from "./TribunalVerdictModal";
 import TransactionGate from "./TransactionGate";
 import TopologyView from "./views/TopologyView";
 import TribunalView from "./views/TribunalView";
@@ -47,7 +48,7 @@ export default function Experience() {
   // Suppress Drei Html scene labels whenever a modal/dialog is open so they
   // never bleed through the blurred backdrop. (Non-world views unmount the
   // board entirely, so labels are already gone there.)
-  const showLabels = !foundOpen && !hudOverlayOpen && !s.txRequest;
+  const showLabels = !foundOpen && !hudOverlayOpen && !s.txRequest && !s.latestVerdict;
 
   return (
     <>
@@ -107,7 +108,7 @@ export default function Experience() {
         />
       )}
 
-      {view === "tribunal" && <TribunalView state={s.state} />}
+      {view === "tribunal" && <TribunalView state={s.state} history={s.tribunalHistory} />}
 
       {view === "treasury" && (
         <TreasuryView
@@ -157,6 +158,14 @@ export default function Experience() {
           }}
         />
       )}
+
+      {/* Post-dispute adjudication card: shows the tribunal's verdict tier and
+          the multi-LLM judicial rationale once a dispute resolves. */}
+      <TribunalVerdictModal
+        verdict={s.latestVerdict}
+        enclaves={s.enclaves}
+        onClose={s.dismissVerdict}
+      />
     </>
   );
 }

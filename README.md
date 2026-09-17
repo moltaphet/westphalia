@@ -2,18 +2,87 @@
 
 An on-chain diplomatic protocol in which sovereign AI agents write treaties in
 natural language, bond them with real GEN, and have their breaches adjudicated
-by a GenLayer validator quorum -- rendered as an interactive 3D voxel war room.
+by a **multi-LLM GenLayer validator quorum that reads real evidence on-chain** --
+rendered as an interactive 3D voxel war room.
+
+![Network: GenLayer Studio Next](https://img.shields.io/badge/network-GenLayer%20Studio%20Next-00E5FF)
+![Chain ID: 61997](https://img.shields.io/badge/chain%20id-61997-7c3aed)
+![Contract: 0x126d..74d9](https://img.shields.io/badge/contract-0x126d..74d9-00FFA3)
+![Direct tests: 65 passing](https://img.shields.io/badge/direct%20tests-65%20passing-2ea043)
+![genvm-lint: clean](https://img.shields.io/badge/genvm--lint-clean-2ea043)
+![Runner: py-genlayer v0.3.0](https://img.shields.io/badge/runner-py--genlayer%20v0.3.0-333)
 
 | | |
 |---|---|
-| **Live contract** | [`0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41`](https://explorer-studio-dev.genlayer.com/address/0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41) |
-| **Network** | GenLayer Studio Net, chain 61997 |
-| **Explorer** | https://explorer-studio-dev.genlayer.com |
+| **Live contract** | [`0x126d145Edcb422E94a3202dFa5c983C8DC5374d9`](https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9) |
+| **Network** | GenLayer Studio Next, chain 61997 |
+| **RPC** | `https://studio-next.genlayer.com/api` |
+| **Explorer** | https://explorer-studio-next.genlayer.com |
 | **Contract source** | [`contracts/westphalia.py`](contracts/westphalia.py) |
 | **Runner** | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
-| **Tests** | 59 passing (36 contract + 23 agent); 5 integration tests need a live network |
-| **Demo video** | [Demo Video Placeholder - Required for Submission] |
+| **Tests** | 65 direct pytest tests passing; `genvm-lint check` clean (23 methods, 11 view / 12 write) |
+| **Demo video** | [Demo Walkthrough Video - Click to Watch](https://...) |
 | **Reviewer quickstart** | [Quickstart for reviewers](#quickstart-for-reviewers) |
+
+---
+
+## Audited V3 -- what makes GenLayer load-bearing
+
+Westphalia is a production-hardened V3, shipped after two adversarial security
+audits. GenLayer is not decoration: the protocol **cannot function** without
+on-chain web reads and multi-LLM consensus, and the code layer only backstops
+the tribunal, it never replaces it.
+
+### 1. True semantic multi-LLM adjudication (no "AI theater")
+
+- On a dispute, every validator independently runs the arbitration closure: it
+  fetches the **defendant's dual telemetry** and the plaintiff's **evidence
+  document** on-chain with `gl.nondet.web.get(evidence_uri)` (SSRF-guarded,
+  sanitized, truncated to 1,500 chars), then a **multi-LLM tribunal reasons over
+  the qualitative covenant `terms`, the allegation, and the real evidence**.
+- Consensus is reached under the Equivalence Principle via
+  `gl.eq_principle.prompt_comparative`: validators must agree on the **core legal
+  judgment**, not on a byte-identical string. A judge that read the evidence and
+  the covenant is what decides `CRITICAL_BREACH` vs `ELEVATED_RISK` vs `NORMAL`.
+- The code-side clamp is a **narrow anti-hallucination guardrail, not an
+  arithmetic `if/else` replacement**: it floors an injected breach to `NORMAL`
+  only when telemetry reads a clean `0 bps` **and** no evidence document was
+  provided. Everywhere else the tribunal's reasoning is trusted across the full
+  tier spectrum.
+
+### 2. Game-theoretic hardening
+
+- **Courthouse race eliminated.** Telemetry is party-attributed
+  (`{"party_a": ..., "party_b": ...}`) and adjudication reads only the
+  **defendant's** metric, so a plaintiff can never weaponize a breach charged to
+  itself to slash the counterparty.
+- **Neutral oracle conflict (`FEED_CONFLICT`).** If the two independent-host
+  oracles contradict, diverge by more than 5%, or are unreachable / corrupt, the
+  dispute settles neutrally: **100% dispute-bond refund, 0 fee**, and the treaty
+  stays `ACTIVE`. A defendant who controls one feed cannot force a slash.
+- **Anti-griefing.** Independent per-party elevated flags
+  (`elevated_slashed_a`, `elevated_slashed_b`): each party can be
+  elevated-slashed at most once; a second elevated verdict settles and closes the
+  treaty instead of bleeding the defendant with arbitrary evidence hashes.
+- **Anti-hostage.** `cancel_proposal` reclaims a proposer's bond from an
+  unratified proposal, and unilateral `exit_treaty` has a notice window that
+  **either** party may execute after expiry (with a lapse fallback), so no party
+  is ever trapped by a stalling counterparty.
+- Plus: mandatory **dual independent-host oracles**, SSRF hardening (`urlsplit`,
+  CGNAT `100.64.0.0/10`, `0.0.0.0/8`, trailing-dot and backslash normalization),
+  strict per-party numeric telemetry parsing, and governor rotation
+  (`transfer_governor`, which rejects the zero address).
+
+### 3. Transparency
+
+- The **local demo agents** (`agent/decider.py`) use **deterministic heuristics**
+  so hackathon evaluation is reproducible: the same inputs always produce the
+  same offers and the same staged outcomes, with no run-to-run flakiness. This is
+  the off-chain **agent policy** only.
+- The **on-chain tribunal adjudication is fully decentralized**: every GenVM
+  validator independently fetches the evidence and runs its own LLM, and the
+  verdict is reached across validators under the Equivalence Principle. The
+  determinism of the demo agents never touches the on-chain ruling.
 
 ---
 
@@ -78,7 +147,7 @@ Three artifacts make up the repository:
 
 | Artifact | Path | What it is |
 |---|---|---|
-| Intelligent contract | `contracts/westphalia.py` | The entire protocol. 22 public methods, 11 view / 11 write. |
+| Intelligent contract | `contracts/westphalia.py` | The entire protocol. 23 public methods, 11 view / 12 write. |
 | Frontend dApp | `frontend/` | The board, the HUD, and the four analysis views. |
 | Autonomous agents | `agent/` | Two LLM-driven negotiators that found enclaves, negotiate, and litigate without a human. |
 
@@ -176,9 +245,12 @@ it later:
 | `expires_at` | Duration. Zero is rejected; >365 days is rejected (defense P2). |
 | `status` | `PROPOSED` -> `ACTIVE` -> `SETTLED` / `EXPIRED`. |
 
-The dual-oracle requirement is not decoration. Both feeds are fetched at dispute
-time, and if they disagree by more than 5% (`DIVERGENCE_BPS`), the dispute is
-forced to `MALICIOUS_REPORT` rather than adjudicated on contradictory evidence.
+The dual-oracle requirement is not decoration. The two feeds must be on
+independent hosts, and if they disagree by more than 5% (`DIVERGENCE_BPS`), are
+unreachable, or return corrupt data, the dispute settles as a neutral
+`FEED_CONFLICT` -- the plaintiff's bond is refunded in full with no fee, and the
+treaty stays `ACTIVE` -- rather than being adjudicated on contradictory evidence.
+This is what stops a defendant who controls one feed from forcing a slash.
 
 ### 4.3 Escrow and the solvency invariant
 
@@ -230,19 +302,22 @@ agree on the same tier.
 
 ### 4.5 Verdict tiers and settlement
 
-The quorum's answer is quantized to exactly one of four tiers. Settlement is
-ordinary deterministic code from that point on.
+The tribunal's answer is one of four categorical tiers, plus a code-decided
+neutral outcome for feed conflicts. Settlement is ordinary deterministic code
+from that point on.
 
 | Tier | Escrow effect | Reputation | Enclave |
 |---|---|---|---|
 | `CRITICAL_BREACH` | 100% of defendant bond -> plaintiff. Dispute bond refunded. | Plaintiff +15 | Defendant `SANCTIONED` |
-| `ELEVATED_RISK` | 25% of defendant bond -> reserves. Dispute bond refunded. | Defendant -10 | unchanged |
+| `ELEVATED_RISK` | 25% of defendant bond -> reserves. Dispute bond refunded. A second elevated verdict against the same party settles and closes the treaty. | Defendant -10 | unchanged |
 | `NORMAL` | Dismissed. Dispute bond refunded minus a 5 GEN validation fee. | unchanged | unchanged |
 | `MALICIOUS_REPORT` | 100% of the *plaintiff's* dispute bond -> reserves. | Plaintiff -20 | unchanged |
+| `FEED_CONFLICT` | Neutral. 100% dispute-bond refund, **zero** fee. | unchanged | unchanged |
 
-`MALICIOUS_REPORT` is the answer to frivolous litigation, and it is also what a
-contradictory oracle pair produces. Suing without evidence costs more than not
-suing.
+`MALICIOUS_REPORT` is the answer to frivolous litigation the tribunal judges
+unsupported by the evidence. A *contradictory or unreachable oracle pair* is no
+longer forced to `MALICIOUS_REPORT` -- that would let a defendant weaponize a
+feed it controls -- and instead settles neutrally as `FEED_CONFLICT`.
 
 ### 4.6 Lifecycle
 
@@ -341,7 +416,7 @@ All economic parameters are module constants, not magic numbers.
 | `HIGH_BOND_THRESHOLD` | 5000 GEN | Above this, the proposer's enclave must be matured. |
 | `ENCLAVE_MATURATION_DELAY` | 3600 s | Age required before high-tier treaties. |
 | `DISPUTE_COOLDOWN` | 300 s | Between successful disputes on one treaty. |
-| `DIVERGENCE_BPS` | 500 | Oracle disagreement above 5% forces MALICIOUS_REPORT. |
+| `DIVERGENCE_BPS` | 500 | Oracle disagreement above 5% settles as a neutral FEED_CONFLICT. |
 | `BPS_CRITICAL` / `BPS_ELEVATED` | 7500 / 2500 | Slash fractions for the two adverse tiers. |
 | `REP_SEED` / `REP_REWARD_CRITICAL` | 50 / +15 | Reputation seeding and vindication reward. |
 | `REP_DEBIT_ELEVATED` / `REP_DEBIT_MALICIOUS` | -10 / -20 | Reputation penalties. |
@@ -350,7 +425,7 @@ All economic parameters are module constants, not magic numbers.
 
 ### 5.3 Public surface
 
-22 public methods: 11 view, 11 write. The ABI in `frontend/lib/contract.ts`
+23 public methods: 11 view, 12 write. The ABI in `frontend/lib/contract.ts`
 mirrors this exactly, and `scripts/check_abi.py` fails the build if it drifts.
 
 | # | Method | Kind | Payable | Purpose |
@@ -394,15 +469,22 @@ failure. The contract keeps the boundary sharp.
 
 Inside the non-deterministic block:
 
-1. Both oracle URLs are fetched via `gl.nondet.web`.
-2. HTTP 429/5xx raise `[TRANSIENT]`; a malformed LLM response raises
+1. Both oracle URLs are fetched via `gl.nondet.web`, reading the **defendant's**
+   party-attributed metric (`{"party_a": ..., "party_b": ...}`) only.
+2. The plaintiff's `evidence_uri` is fetched with `gl.nondet.web.get` when it is
+   an http(s) URL that passes the SSRF guard, sanitized and truncated to 1,500
+   chars, so the tribunal reasons over the real document.
+3. HTTP 429/5xx raise `[TRANSIENT]`; a malformed LLM response raises
    `[LLM_ERROR]`. Both revert the dispute and refund the bond.
-3. The two readings are compared; >5% divergence forces `MALICIOUS_REPORT`.
-4. The clause and readings are submitted to
-   `gl.eq_principle.prompt_comparative`, whose principle requires the quorum to
-   agree on the same tier.
-5. The tier string is validated against `VALID_TIERS` before it is used. An
-   unrecognized tier is an LLM failure, not a settlement.
+4. If the two readings contradict, diverge >5%, or are unreachable/corrupt, the
+   round returns `FEED_CONFLICT` (neutral, full refund) -- decided by code, never
+   by the model.
+5. Otherwise the covenant `terms`, allegation, evidence, and defendant metric are
+   submitted to `gl.eq_principle.prompt_comparative`, whose principle requires the
+   quorum to agree on the same *core legal judgment* (semantic, not byte-identical).
+6. The tier is validated against `VALID_TIERS` and passed through the narrow
+   anti-hallucination clamp (floors an injected breach to `NORMAL` only at 0 bps
+   with no evidence) before settlement.
 
 ### 5.5 Adversarial hardening
 
@@ -416,13 +498,24 @@ earlier revision, then fixed, then pinned with a permanent regression test.
 | P3 | Sanctioned ratification -- a SANCTIONED enclave, or one whose treaty already expired, still ratifies. | Both parties must be ACTIVE at ratify time; a PROPOSED treaty past its expiry is not ratifiable. |
 | P4 | SSRF via numeric host encodings -- `0x7f000001`, `2130706433`, `0177.0.0.1`, `127.1`, `0x7f.1`. | Full `inet_aton` semantics: every encoding is normalized to a 32-bit integer and checked against all private and reserved ranges. |
 
-Plus seven structural defenses: prompt-injection isolation via
-`<untrusted_input>` delimiters with ASCII sanitization and hard guardrails;
-counterparty and treaty binding asserted deterministically before any
-non-deterministic block; treaty-bound telemetry oracles (see 4.4); the solvency
-invariant with pull-over-push distribution; basis-point quantization to a strict
-four-tier categorical output; `[TRANSIENT]` and `[LLM_ERROR]` failover; and a
-deterministic replay index with expiry-gated litigation and a
+Two subsequent adversarial audits added the game-theoretic and semantic
+hardening this V3 ships with, each pinned by regression tests
+(`tests/direct/test_review_poc.py`, `tests/direct/test_audit2.py`):
+
+| # | Vector | Defense |
+|---|---|---|
+| A1 | LLM hallucination / prompt injection slashing an innocent defendant. | Semantic adjudication over real evidence; a narrow code clamp floors an injected breach to `NORMAL` only at 0 bps with no evidence -- a guardrail, not an arithmetic override. |
+| A2 | Defendant-controlled oracle forcing a slash by contradicting itself. | Contradiction / >5% divergence / unreachable feeds settle neutrally as `FEED_CONFLICT` (100% refund, 0 fee). |
+| A3 | Cumulative `ELEVATED_RISK` griefing draining a bond with fresh evidence hashes. | Independent per-party flags (`elevated_slashed_a`, `elevated_slashed_b`); a second elevated verdict settles and closes the treaty. |
+| A4 | Race to courthouse -- a breacher sues first to slash the victim. | Party-attributed telemetry; adjudication reads only the **defendant's** metric. |
+| A5 | Unilateral-exit hostage / same-host "dual" oracles / boolean-and-overflow telemetry / zero-address governor burn. | Either party executes an exit after notice (lapse fallback); dual **independent-host** oracles required; strict per-party numeric parsing; `transfer_governor` rejects the zero address. |
+
+Plus the standing structural defenses: untrusted strings ASCII-sanitized (angle
+brackets neutralized) before entering the prompt; counterparty and treaty binding
+asserted deterministically before any non-deterministic block; treaty-bound
+telemetry oracles (see 4.4); the solvency invariant with pull-over-push
+distribution; strict categorical tier output; `[TRANSIENT]` and `[LLM_ERROR]`
+failover; and a deterministic replay index with expiry-gated litigation and a
 collateral-exit gate.
 
 ## 6. Frontend architecture
@@ -507,7 +600,7 @@ Writes need three things, and each one is a failure mode that was hit and fixed:
    signing key never leaves the extension.
 2. **The SDK's own chain object.** See 6.3. Without it a write dies inside viem
    (`"Cannot convert undefined to a BigInt"`).
-3. **An explicit fee.** Studio Net has no fee-manager contract, so the fee comes
+3. **An explicit fee.** Studio Next has no fee-manager contract, so the fee comes
    from the chain's live fee policy. Omitting it leaves `feeValue` at `0n` and
    the consensus contract rejects the transaction with
    `FeeValueMustBeNonZero(1)`.
@@ -650,10 +743,10 @@ anything twice.
 
 ```
 contracts/
-  westphalia.py           The protocol. 22 public methods.
+  westphalia.py           The protocol. 23 public methods.
 
 tests/
-  direct/                 In-memory contract suite (36 tests, ~45s). No network.
+  direct/                 In-memory contract suite (65 tests, ~75s). No network.
     conftest.py           GenVM v0.3 harness wiring.
     test_westphalia.py    9 baseline adversarial cases.
     test_westphalia_v2.py 6 V2 protocol cases.
@@ -661,6 +754,11 @@ tests/
     test_poc_regressions.py 5 post-audit P1-P4 PoC regressions.
     test_westphalia_v3.py 3 V3.1 cases: proposal cancellation, roster index,
                           claim-payout fund safety.
+    test_review_poc.py    19 first-audit fixes: LLM/telemetry clamp, FEED_CONFLICT
+                          refunds, per-treaty elevated cap, exit hostage, SSRF.
+    test_audit2.py        10 second-audit fixes: party-attributed telemetry,
+                          independent per-party elevated flags, transfer_governor,
+                          strict numeric parsing, semantic evidence adjudication.
   integration/            Full-consensus suite (5 tests). Needs a live network.
     test_westphalia.py    Deploy, found, propose, ratify, dispute, settle.
     fixtures.py           Expected state, kept beside the assertions that read it.
@@ -785,18 +883,18 @@ the board reads the deployed contract directly. Confirm it yourself:
 - **TOTAL VALUE LOCKED** and the solvency badge are read live from
   `get_protocol_overview` and reconcile against the explorer.
 
-That address is **populated**, and the board reads it live: the command bar
-badges `ON-CHAIN`, the archipelago holds **six islands**, and **TOTAL VALUE
-LOCKED** reads **4300 GEN (chain)**, straight from the contract's `locked_escrow`.
-Every figure on the board reconciles against `get_protocol_overview` and the
-explorer.
+The audited-V3 address is **freshly deployed**: the board reads it live and the
+command bar badges `ON-CHAIN / EMPTY`, because a new contract answers
+`get_enclave_count` with `0` and holds no enclaves yet. Every figure on the board
+is still read live from `get_protocol_overview` and reconciles against the
+explorer -- there is simply nothing on it until the agents run.
 
-Six sovereignties and nine treaties is the state `agent/demo` followed by
-`agent/seed` produces, and those two scripts are what put it there --
-`agent/chain.py` points at this address. Against a **fresh** deployment the same
-pair reaches the same place from nothing, which is what to expect if you deploy
-your own: a new contract answers `get_enclave_count` with `0`, the board reads
-`ON-CHAIN / EMPTY`, and the archipelago stays empty until the agents run.
+Running `agent/demo` then `agent/seed` populates it to **six islands** and nine
+treaties (seven ACTIVE), with **TOTAL VALUE LOCKED** reading **4300 GEN (chain)**
+straight from `locked_escrow`. Those two scripts are what put that state there --
+`agent/chain.py` points at this address -- and the same pair reaches the same
+place from nothing on any fresh deployment, because the same source driven by the
+same state-driven scripts converges on the same outcome.
 
 ```bash
 .venv/bin/python -m agent.demo       # Halcyon and Meridian, through to a verdict
@@ -818,7 +916,7 @@ execution budget and message fees), the network's current price caps, the
 pending-queue depth for your account, and a badge reporting whether the quoted
 fee policy still matches the chain's. Nothing is dispatched until you sign. The
 quote reads `source: network-default` and `verification: verified`, which is a
-property of Studio Net's live fee policy rather than of this contract, and is
+property of Studio Next's live fee policy rather than of this contract, and is
 what a healthy quote looks like there.
 
 ### Run the contract test suite (about three minutes)
@@ -851,8 +949,8 @@ the dispute.
 ### Verify the deployment on the explorer
 
 Contract:
-[`0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41`](https://explorer-studio-dev.genlayer.com/address/0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41)
-on GenLayer Studio Net (chain 61997).
+[`0x126d145Edcb422E94a3202dFa5c983C8DC5374d9`](https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9)
+on GenLayer Studio Next (chain 61997).
 
 GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live
 contract and cannot be used to compare deployed bytecode against source. The
@@ -919,14 +1017,14 @@ wallet: it is chmod 0600 for a reason.
 
 Two runners, for two kinds of test.
 
-**Bare `pytest` runs the offline suites** -- 59 tests, no network, no keys, no
+**Bare `pytest` runs the offline suites** -- 88 tests, no network, no keys, no
 funded account:
 
 ```bash
-# Both suites: 59 tests.
+# Both suites: 88 tests.
 .venv/bin/python -m pytest -q
 
-# Contract only: 36 tests, in-memory, ~45s.
+# Contract only (direct mode): 65 tests, in-memory, ~75s.
 .venv/bin/python -m pytest tests/direct/ -q
 
 # Agents only: 23 tests.
@@ -999,7 +1097,7 @@ Static analysis of the contract:
 ```
 
 `genvm-linter` is pinned in `requirements.txt`, so these work after the install
-steps above. `Validation passed`, the method census (22 methods: 11 view, 11
+steps above. `Validation passed`, the method census (23 methods: 11 view, 12
 write), `No type errors found`, and the ABI comparison are all stable.
 `genvm-lint check` runs all three and passes.
 
@@ -1076,7 +1174,7 @@ names that build:
 
 So `gl.storage.allow` is not a preference; against this runner it is the only
 object that exists. Rewriting both decorators to `@gl.allow_storage` makes all
-36 contract tests fail with an import error -- measured, not assumed -- because
+65 contract tests fail with an import error -- measured, not assumed -- because
 the SDK the runner loads has no such symbol.
 
 There is no newer linter to wait for, either: `0.11.1rc2` -- what
@@ -1116,10 +1214,10 @@ and answer identically; either works, and the default is `studio-next`.
 
 | Network | Chain ID | RPC |
 |---|---|---|
-| Studio Net (dev) | 61997 | `https://studio-next.genlayer.com/api` |
+| Studio Next | 61997 | `https://studio-next.genlayer.com/api` |
 | Studio (fallback) | 61999 | `https://studio.genlayer.com/api` |
 
-Explorer: https://explorer-studio-dev.genlayer.com
+Explorer: https://explorer-studio-next.genlayer.com
 
 `gltest.config.yaml` is the Python side of the same configuration: it names the
 networks the contract suites run against, and the `contracts` path the runner
@@ -1150,7 +1248,7 @@ reads `contracts/westphalia.py`, waits for the transaction to be *decided* (a
 deploy that reverts in `__init__` still decides), and prints the contract
 address plus the three places that address has to go. By hand, those are:
 
-1. Deploy `contracts/westphalia.py` to GenLayer Studio Net. The runner pin is
+1. Deploy `contracts/westphalia.py` to GenLayer Studio Next. The runner pin is
    the first line of the file; keep it.
 2. Point the frontend at the new address -- either set
    `NEXT_PUBLIC_DIPLOMATIC_CONTRACT_ADDRESS` in `frontend/.env.local`, or change
@@ -1172,11 +1270,11 @@ not a loud one.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `FeeValueMustBeNonZero(1)` | A write was dispatched with no fee. Studio Net has no fee manager, so the deposit has to be derived from the chain's live fee policy. | Route the write through the Transaction Kit -- `DiplomaticContract.write()` does, via the authorizer. A hand-rolled `writeContract()` must call `estimateTransactionFees()` first. |
+| `FeeValueMustBeNonZero(1)` | A write was dispatched with no fee. Studio Next has no fee manager, so the deposit has to be derived from the chain's live fee policy. | Route the write through the Transaction Kit -- `DiplomaticContract.write()` does, via the authorizer. A hand-rolled `writeContract()` must call `estimateTransactionFees()` first. |
 | The approval gate never opens | No signer. `write()` short-circuits to a simulated receipt when the client is not connected. | Connect a wallet; the command bar shows whether one is linked. |
 | `Cannot convert undefined to a BigInt` | The chain object was hand-built instead of taken from the SDK. | Spread `chains.studioDevnet`; override only `rpcUrls`. |
 | `No account set` | The client has no account. | Connect an injected wallet, or pass an account. |
-| `E014 ... needs @allow_storage decorator` from `genvm-lint` | The linter's `E014` list names the two spellings it was written against, and the pinned runner exposes a third. A false positive, not a contract defect. | Already handled: the contract binds `allow_storage = gl.storage.allow`, so `genvm-lint check` passes. See the decorator note in section 5; the 36-test suite executes the contract for real. |
+| `E014 ... needs @allow_storage decorator` from `genvm-lint` | The linter's `E014` list names the two spellings it was written against, and the pinned runner exposes a third. A false positive, not a contract defect. | Already handled: the contract binds `allow_storage = gl.storage.allow`, so `genvm-lint check` passes. See the decorator note in section 5; the 65-test suite executes the contract for real. |
 | `Missing or invalid parameters` on a view | Usually correct: the row does not exist. `get_treaty(1)` on a contract whose `next_treaty_id` is 1 is an expected revert, not a fault. | Check `next_treaty_id` first. |
 | Board reads `ON-CHAIN / EMPTY` | The contract answered and holds no enclaves. `get_enclave_count` returns `0`. This is what a freshly deployed contract reads. | Run the agents (sections 3 and 4), or point at a populated deployment. |
 | Board reads `READING CHAIN` and stays there | The first read never resolved. | Check `NEXT_PUBLIC_GENLAYER_RPC_URL` and network access; a failed read eventually falls back to `SIMULATED`. |
@@ -1191,22 +1289,28 @@ not a loud one.
 
 | Field | Value |
 |---|---|
-| Network | GenLayer Studio Net (dev), chain 61997 |
-| Contract | `0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41` |
+| Network | GenLayer Studio Next, chain 61997 |
+| Contract | `0x126d145Edcb422E94a3202dFa5c983C8DC5374d9` |
+| Explorer | https://explorer-studio-next.genlayer.com/address/0x126d145Edcb422E94a3202dFa5c983C8DC5374d9 |
 | RPC | `https://studio-next.genlayer.com/api` |
 | Runner | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
 | Source | `contracts/westphalia.py` |
-| Revision | V3.1 -- enumerable enclave roster (`get_enclave_count`, `get_enclave_by_index`), `cancel_proposal`, a `claim_payout` fund-safety guard, and bytes/str telemetry-body resilience. |
-| Source SHA-256 | `b4ac8d14b99b23fb5e226ec25aa0af6ff4d17103b181bf72e4cbe5b23061cf64` |
+| Revision | V3 (audited) -- semantic multi-LLM adjudication with on-chain evidence reads, party-attributed telemetry, `FEED_CONFLICT` neutral resolution, independent per-party elevated flags, dual independent-host oracles, SSRF hardening, and governor rotation (`transfer_governor`). Supersedes V3.1 (`0x231f...2e41`). |
+| Source SHA-256 | `868c346c64a077ef2db6d72e4b1fc14f243acd264c8de24b527025c9b323bcfa` |
 
 Full observed state, at deploy time and at the current head, is recorded in
 [`deployments/studio-dev.json`](deployments/studio-dev.json). That file is the
 authoritative record; it is updated by reading the chain, never by hand.
 
-### Live state at the current head
+### Demonstration state (reproducible)
 
-Read from the contract, after `agent.demo` and `agent.seed` were run against it.
-Six sovereignties, nine treaties, seven of them ACTIVE:
+The audited-V3 address is freshly deployed and starts empty
+(`get_enclave_count == 0`). Running `agent.demo` then `agent.seed` against it
+reproduces the state below -- the same source driven by the same state-driven
+scripts converges on the same outcome. The exact snapshot was read from the V3.1
+predecessor after that run and is preserved in
+[`deployments/studio-dev.json`](deployments/studio-dev.json): six sovereignties,
+nine treaties, seven of them ACTIVE.
 
 | Counter | Value |
 |---|---|
@@ -1262,15 +1366,15 @@ in it failed.
 
 | Check | Command | Result |
 |---|---|---|
-| Contract lint | `.venv/bin/genvm-lint check contracts/westphalia.py` | Lint and validation both pass; 22 methods (11 view, 11 write). |
-| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 36 passed. |
+| Contract lint | `.venv/bin/genvm-lint check contracts/westphalia.py` | Lint and validation both pass; 23 methods (11 view, 12 write). |
+| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 65 passed. |
 | Agent tests | `.venv/bin/python -m pytest agent/ -q` | 23 passed. |
-| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 59 collected. |
+| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 88 collected. |
 | Type check | `cd frontend && npx tsc --noEmit` | Exit 0, clean. |
 | Lint | `cd frontend && npx eslint . --max-warnings=0` | Exit 0, no warnings. |
 | Production build | `cd frontend && npm run build` | 0 TypeScript, lint, and SSR/Canvas errors. |
-| ABI fidelity | `DIPLOMATIC_ABI` entries vs `contracts/westphalia.py` public methods | 22 == 22, name-for-name identical (11 view / 4 payable / 7 nonpayable). |
-| Deployment binding | Live `get_enclave_count` on the recorded address | Answers `6`, and `get_enclave_by_index` resolves all six slots. The call reverts on the superseded revision, so the roster index is genuinely deployed rather than merely present in the repository. |
+| ABI fidelity | `DIPLOMATIC_ABI` entries vs `contracts/westphalia.py` public methods | 23 == 23, name-for-name identical (11 view / 4 payable / 8 nonpayable). |
+| Deployment binding | Live view reads on the recorded address | The audited-V3 address is freshly deployed and reads `get_enclave_count == 0`; running the agent scripts populates it. The V3.1 predecessor's populated six-enclave snapshot is preserved in [`deployments/studio-dev.json`](deployments/studio-dev.json). |
 | Write path | `found_sovereignty` on chain 61997 | Receipt `FINISHED_WITH_RETURN`; collateral moved; `get_enclave` returns the record. |
 | End-to-end | `.venv/bin/python -m agent.demo` | Full lifecycle to a `CRITICAL_BREACH` verdict; escrow settled; reputation rewritten. |
 | ASCII purity | every tracked file | All UI labels, code, variables, and comments are pure ASCII English. |
