@@ -2,12 +2,12 @@
   "network": "studio-next",
   "chain_id": 61997,
   "rpc_url": "https://studio-next.genlayer.com/api",
-  "contract_address": "0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8",
-  "explorer_url": "https://explorer-studio-next.genlayer.com/address/0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8",
+  "contract_address": "0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E",
+  "explorer_url": "https://explorer-studio-next.genlayer.com/address/0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E",
   "source": "contracts/westphalia.py",
   "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
-  "source_sha256_at_record": "b8fce2a66849da3ac086a39feeb9ed15f9cf6bbe730c7ad158ee80d114cbb1cb",
-  "revision": "V4.1.1 (audited): the V4.1 hardening pass plus the 404 render gate. V4.1.1 -- _fetch_evidence runs _get_evidence_text (a plain gl.nondet.web.get) FIRST as a 2xx status gate and returns NO_EVIDENCE on anything else, then calls _render_evidence_text for the prose and falls back to the verified GET body; gl.nondet.web.render exposes no HTTP status, so with render first a 404 or 500 error page read as a document and set evidence_present, which drives _clamp_tier's third corridor -- a dead link could turn a dismissal into a 25% slash. V4.1 -- full prompt-tag isolation (every litigant-controlled prompt field wrapped in its own sanitized tag: <untrusted_evidence_data>, <covenant_terms>, <plaintiff_allegation>, <evidence_source>) and strict telemetry clamping in _clamp_tier: the MALICIOUS_REPORT floor moved from BPS_CRITICAL (7500) down to BPS_ELEVATED (2500) so a report the metric corroborates is never confiscated as a lie, and the negligible band (< 500 bps) floors CRITICAL_BREACH and ELEVATED_RISK to NORMAL with no evidence escape, so a document can never manufacture a breach out of a metric that shows none. Builds on the V4 audited base.",
+  "source_sha256_at_record": "d62c4f0c31eddf26dc223970829f1d0a9bf2045865a09d07393029dcd1621770",
+  "revision": "V4.2 (audited): cryptographic evidence hash binding. `evidence_hash` stopped being a replay label and became a commitment: _fetch_evidence checks it inside the non-deterministic round against the SHA-256 of the document the contract actually fetched, and a document that does not hash to it is NO_EVIDENCE -- exactly like a document that could not be read. The digest is taken over the RAW 2xx response body, not over the rendered / sanitized / truncated text the tribunal reads, so the commitment is reproducible off-chain by any client with one plain HTTP GET and a stock SHA-256, with no need to mirror _sanitize_evidence, the 1500-char truncation budget, or the runner's choice of render over GET. That closes the last gap in the read path: previously a filing named a URI and the tribunal ruled on whatever that URI served at read time, so the on-chain record could not be tied to the bytes it judged. _canon_hash also strips a leading `0x` now, because hexdigest() never carries one and every wallet and block explorer prints one -- without the strip a correctly-committed filing spelled the way a block explorer spells it would be rejected for its notation rather than its document. Builds on the V4.1.1 audited base.",
   "public_methods": {
     "views": [
       "get_protocol_overview",
@@ -40,10 +40,10 @@
     "count": "23 (11 view, 12 write)"
   },
   "verification": {
-    "tests": "tests/direct/ passes in full (76 tests); agent/ passes (24 tests); genvm-lint check reports 0 errors (lint + SDK validation, 23 methods).",
-    "note": "This record pins the V4.1.1 address on GenLayer Studio Next. source_sha256_at_record is the repository revision it was deployed from, and it describes the code actually running at this address: the deployed hash and the in-tree hash are the same file. This deployment is at GENESIS -- deployed empty and with no agent run against it yet -- so the populated demonstration state lives with the V4 predecessor below, which still holds it on chain. agent/chain.py points at this address; running .venv/bin/python -m agent.demo then .venv/bin/python -m agent.seed against it is what reproduces the populated snapshot here.",
+    "tests": "tests/direct/ passes in full (79 tests); agent/ passes (24 tests); genvm-lint check reports 0 errors (lint + SDK validation, 23 methods).",
+    "note": "This record pins the V4.2 address on GenLayer Studio Next. source_sha256_at_record is the repository revision it was deployed from, and it describes the code actually running at this address: the deployed hash and the in-tree hash are the same file, and the explorer's own deploy transaction carries that code, so the identity is checkable rather than asserted (see deployed_code_sha256 below). The address was deployed empty and then populated by running .venv/bin/python -m agent.demo followed by .venv/bin/python -m agent.seed against it; agent/chain.py points at this address.",
     "observed_at_deploy": {
-      "note": "Genesis reading, immediately after deploy, before any agent run. Deploy transaction 0x395dd24a6b64590ac5dcd5c319c1f7908cef6934a4ff36234f22c0f966340f90, submitted 2026-09-17T07:51:57Z from 0x1f9813eeB2de53134af5C824cA156CE82C4EB0fa and finalized with consensus Accepted. That sender is the contract's genesis governor (__init__ sets self.governor = gl.message.sender_address), so drain_reserves and transfer_governor are that key's alone.",
+      "note": "Genesis reading, immediately after deploy, before any agent run. Deploy transaction 0x024e0077f33d17f52c92204c2b7299ffe215521abe845fda062052bbc06c562d, submitted 2026-09-17T09:45:04Z from 0x1f9813eeB2de53134af5C824cA156CE82C4EB0fa and finalized with consensus Accepted. That sender is the contract's genesis governor (__init__ sets self.governor = gl.message.sender_address), so drain_reserves and transfer_governor are that key's alone. The deposit was 154258200002588 wei (~0.00015 GEN), derived from the chain's live fee policy; Studio Next has no FeeManager, so a deploy that sends no deposit is rejected with FeeValueMustBeNonZero before it runs.",
       "get_protocol_overview": {
         "balance": "0",
         "total_collateral": "0",
@@ -58,20 +58,87 @@
       "sanitize_preview": "[x]"
     },
     "observed_at_current_head": {
-      "note": "Unchanged from the deploy reading: no transaction has been submitted to this address.",
+      "note": "Read from the chain after agent.demo and agent.seed were run against this address. The demo reached consensus on CRITICAL_BREACH and settled: Halcyon (plaintiff) was credited 1500 GEN and Meridian (defendant) was sanctioned, its 150 GEN collateral moved to reserves -- which is why reserves is no longer zero. agent.seed then founded the wider roster and wired treaties #3 onward. One ratification did not land: the local faucet rate-limited (Rate limit exceeded: 500 requests per hour) on treaty #9 after the counterparty had matched the bond, so #9 stands PROPOSED and its second bond is not in locked_escrow. That is the whole of the difference from the predecessor's populated snapshot. Re-running .venv/bin/python -m agent.seed against this address resumes it: the script is state-driven and submits nothing twice.",
+      "reading_caveat": "The overview, the enclave count and roster slots 0-1 were read directly. The remaining roster slots and every treaty record were NOT re-enumerated: the same 500-requests-per-hour RPC limit that stopped the seed refused further gen_call reads. The roster below is therefore partial, and treaty status counts are deliberately omitted rather than inferred -- total treaty count (9) is derived from next_treaty_id, which was read.",
       "get_protocol_overview": {
-        "balance": "0",
-        "total_collateral": "0",
-        "locked_escrow": "0",
-        "reserves": "0",
-        "total_claimable": "0",
-        "next_treaty_id": "1",
+        "balance": "6500000000000000000000",
+        "total_collateral": "750000000000000000000",
+        "locked_escrow": "4100000000000000000000",
+        "reserves": "150000000000000000000",
+        "total_claimable": "1500000000000000000000",
+        "next_treaty_id": "10",
         "solvent": true
       },
-      "get_enclave_count": "0"
+      "get_enclave_count": "6",
+      "roster_read_directly": [
+        {
+          "index": 0,
+          "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
+          "name": "Halcyon",
+          "archetype": "Autonomous Arbiter",
+          "status": "ACTIVE",
+          "reputation": "65",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 1,
+          "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+          "name": "Meridian",
+          "archetype": "Oracle Collective",
+          "status": "SANCTIONED",
+          "reputation": "0",
+          "collateral": "0"
+        }
+      ],
+      "treaty_counts": {
+        "total": 9,
+        "detail": "not enumerated; see reading_caveat"
+      },
+      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (750 + 4100 + 150 + 1500 == 6500 GEN)"
+    },
+    "deployed_code_sha256": {
+      "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. The explorer API publishes the deploy transaction's own contract_code, which settles the question directly: sha256(base64.b64decode(deploy_tx.data.contract_code)) below is the hash of the code RUNNING at contract_address.",
+      "method": "curl -s https://explorer-studio-next.genlayer.com/api/address/<contract_address> | python3 -c 'import json,sys,base64,hashlib; d=json.load(sys.stdin)[\"transactions\"][0]; print(hashlib.sha256(base64.b64decode(d[\"data\"][\"contract_code\"])).hexdigest())'",
+      "deployed_code_sha256": "d62c4f0c31eddf26dc223970829f1d0a9bf2045865a09d07393029dcd1621770",
+      "in_tree_source_sha256": "d62c4f0c31eddf26dc223970829f1d0a9bf2045865a09d07393029dcd1621770",
+      "match": true
     }
   },
   "predecessors": [
+    {
+      "contract_address": "0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8",
+      "explorer_url": "https://explorer-studio-next.genlayer.com/address/0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8",
+      "status": "superseded by the V4.2 revision; still live and readable on chain, and still at genesis (no agent run was ever pointed at it)",
+      "revision": "V4.1.1 (audited): the V4.1 hardening pass plus the 404 render gate. V4.1.1 -- _fetch_evidence runs _get_evidence_text (a plain gl.nondet.web.get) FIRST as a 2xx status gate and returns NO_EVIDENCE on anything else, then calls _render_evidence_text for the prose and falls back to the verified GET body; gl.nondet.web.render exposes no HTTP status, so with render first a 404 or 500 error page read as a document and set evidence_present, which drives _clamp_tier's third corridor -- a dead link could turn a dismissal into a 25% slash. V4.1 -- full prompt-tag isolation (every litigant-controlled prompt field wrapped in its own sanitized tag: <untrusted_evidence_data>, <covenant_terms>, <plaintiff_allegation>, <evidence_source>) and strict telemetry clamping in _clamp_tier: the MALICIOUS_REPORT floor moved from BPS_CRITICAL (7500) down to BPS_ELEVATED (2500) so a report the metric corroborates is never confiscated as a lie, and the negligible band (< 500 bps) floors CRITICAL_BREACH and ELEVATED_RISK to NORMAL with no evidence escape, so a document can never manufacture a breach out of a metric that shows none. Builds on the V4 audited base.",
+      "observed_at_deploy": {
+        "note": "Genesis reading, immediately after deploy, before any agent run. Deploy transaction 0x395dd24a6b64590ac5dcd5c319c1f7908cef6934a4ff36234f22c0f966340f90, submitted 2026-09-17T07:51:57Z from 0x1f9813eeB2de53134af5C824cA156CE82C4EB0fa and finalized with consensus Accepted. That sender is the contract's genesis governor (__init__ sets self.governor = gl.message.sender_address), so drain_reserves and transfer_governor are that key's alone.",
+        "get_protocol_overview": {
+          "balance": "0",
+          "total_collateral": "0",
+          "locked_escrow": "0",
+          "reserves": "0",
+          "total_claimable": "0",
+          "next_treaty_id": "1",
+          "solvent": true
+        },
+        "get_enclave_count": "0",
+        "is_safe_url_loopback": false,
+        "sanitize_preview": "[x]"
+      },
+      "observed_at_current_head": {
+        "note": "Unchanged from the deploy reading: no transaction has been submitted to this address.",
+        "get_protocol_overview": {
+          "balance": "0",
+          "total_collateral": "0",
+          "locked_escrow": "0",
+          "reserves": "0",
+          "total_claimable": "0",
+          "next_treaty_id": "1",
+          "solvent": true
+        },
+        "get_enclave_count": "0"
+      }
+    },
     {
       "contract_address": "0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED",
       "explorer_url": "https://explorer-studio-next.genlayer.com/address/0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED",
@@ -90,14 +157,67 @@
         },
         "get_enclave_count": "6",
         "roster": [
-          { "index": 0, "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e", "name": "Halcyon", "archetype": "Autonomous Arbiter", "status": "ACTIVE", "reputation": "65", "collateral": "150000000000000000000" },
-          { "index": 1, "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f", "name": "Meridian", "archetype": "Oracle Collective", "status": "SANCTIONED", "reputation": "0", "collateral": "0" },
-          { "index": 2, "address": "0xeC250E9D8F6E8c6788Cc3622E7324F52fc66a4e7", "name": "Vantage", "archetype": "Liquidity Nexus", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" },
-          { "index": 3, "address": "0x958640fbcb8991298757CC14562681EaC1E5c48F", "name": "Aegis", "archetype": "Defense Vanguard", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" },
-          { "index": 4, "address": "0x144a4588104B8EE058d1F7C49623A60E907c18d6", "name": "Quorum", "archetype": "Oracle Collective", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" },
-          { "index": 5, "address": "0xE121091ABd59D2f686147F0C6135ab9936863730", "name": "Solstice", "archetype": "Autonomous Arbiter", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" }
+          {
+            "index": 0,
+            "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
+            "name": "Halcyon",
+            "archetype": "Autonomous Arbiter",
+            "status": "ACTIVE",
+            "reputation": "65",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 1,
+            "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+            "name": "Meridian",
+            "archetype": "Oracle Collective",
+            "status": "SANCTIONED",
+            "reputation": "0",
+            "collateral": "0"
+          },
+          {
+            "index": 2,
+            "address": "0xeC250E9D8F6E8c6788Cc3622E7324F52fc66a4e7",
+            "name": "Vantage",
+            "archetype": "Liquidity Nexus",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 3,
+            "address": "0x958640fbcb8991298757CC14562681EaC1E5c48F",
+            "name": "Aegis",
+            "archetype": "Defense Vanguard",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 4,
+            "address": "0x144a4588104B8EE058d1F7C49623A60E907c18d6",
+            "name": "Quorum",
+            "archetype": "Oracle Collective",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 5,
+            "address": "0xE121091ABd59D2f686147F0C6135ab9936863730",
+            "name": "Solstice",
+            "archetype": "Autonomous Arbiter",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          }
         ],
-        "treaty_counts": { "total": 9, "active": 7, "proposed": 1, "settled": 1 },
+        "treaty_counts": {
+          "total": 9,
+          "active": 7,
+          "proposed": 1,
+          "settled": 1
+        },
         "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (750 + 4300 + 150 + 1500 == 6700 GEN)"
       }
     },
@@ -126,14 +246,67 @@
         },
         "get_enclave_count": "6",
         "roster": [
-          { "index": 0, "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e", "name": "Halcyon", "archetype": "Autonomous Arbiter", "status": "ACTIVE", "reputation": "65", "collateral": "150000000000000000000" },
-          { "index": 1, "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f", "name": "Meridian", "archetype": "Oracle Collective", "status": "SANCTIONED", "reputation": "0", "collateral": "150000000000000000000" },
-          { "index": 2, "address": "0xeC250E9D8F6E8c6788Cc3622E7324F52fc66a4e7", "name": "Vantage", "archetype": "Liquidity Nexus", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" },
-          { "index": 3, "address": "0x958640fbcb8991298757CC14562681EaC1E5c48F", "name": "Aegis", "archetype": "Defense Vanguard", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" },
-          { "index": 4, "address": "0x144a4588104B8EE058d1F7C49623A60E907c18d6", "name": "Quorum", "archetype": "Oracle Collective", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" },
-          { "index": 5, "address": "0xE121091ABd59D2f686147F0C6135ab9936863730", "name": "Solstice", "archetype": "Autonomous Arbiter", "status": "ACTIVE", "reputation": "50", "collateral": "150000000000000000000" }
+          {
+            "index": 0,
+            "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
+            "name": "Halcyon",
+            "archetype": "Autonomous Arbiter",
+            "status": "ACTIVE",
+            "reputation": "65",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 1,
+            "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+            "name": "Meridian",
+            "archetype": "Oracle Collective",
+            "status": "SANCTIONED",
+            "reputation": "0",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 2,
+            "address": "0xeC250E9D8F6E8c6788Cc3622E7324F52fc66a4e7",
+            "name": "Vantage",
+            "archetype": "Liquidity Nexus",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 3,
+            "address": "0x958640fbcb8991298757CC14562681EaC1E5c48F",
+            "name": "Aegis",
+            "archetype": "Defense Vanguard",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 4,
+            "address": "0x144a4588104B8EE058d1F7C49623A60E907c18d6",
+            "name": "Quorum",
+            "archetype": "Oracle Collective",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          },
+          {
+            "index": 5,
+            "address": "0xE121091ABd59D2f686147F0C6135ab9936863730",
+            "name": "Solstice",
+            "archetype": "Autonomous Arbiter",
+            "status": "ACTIVE",
+            "reputation": "50",
+            "collateral": "150000000000000000000"
+          }
         ],
-        "treaty_counts": { "total": 9, "active": 7, "proposed": 1, "settled": 1 },
+        "treaty_counts": {
+          "total": 9,
+          "active": 7,
+          "proposed": 1,
+          "settled": 1
+        },
         "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (900 + 4300 + 0 + 1500 == 6700 GEN)"
       }
     },
@@ -149,5 +322,5 @@
       "status": "earliest recorded deployment; retired from the repository, still live and readable on chain"
     }
   ],
-  "supersedes": "0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED (V4 audited), and before it 0x126d145Edcb422E94a3202dFa5c983C8DC5374d9 (V3 audited), 0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41 (V3.1), 0xB78A41624fe09163fee3159091E907B7b7Af9D00 and 0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3, carried above as history rather than as the live target."
+  "supersedes": "0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8 (V4.1.1), and before it 0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED (V4 audited), 0x126d145Edcb422E94a3202dFa5c983C8DC5374d9 (V3 audited), 0x231f7fc620350FDE18B6Cae7b53ADb17AC462e41 (V3.1), 0xB78A41624fe09163fee3159091E907B7b7Af9D00 and 0x6fc9fb342ADDE50BE4Cc21360dcB949095e44Fe3, carried above as history rather than as the live target."
 }

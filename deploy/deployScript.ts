@@ -12,6 +12,12 @@
  * assuming one, because assuming the hosted shape silently yields `undefined`
  * on the simulator.
  *
+ * The CLI also reads `receipt.data.contract_address` on hosted chains, so the
+ * order is: decoded transaction data first, then `data`, then the raw receipt.
+ * Reading only the decoded field crashed the script *after* a successful
+ * deploy -- the contract was live and the address was in the receipt the whole
+ * time, but the script raised on it and the run looked like a failure.
+ *
  * The fee preset is built, not implied. Studio Next has no on-chain FeeManager,
  * and the SDK resolves an absent `fees` argument to a deposit of zero rather
  * than deriving one -- which the chain rejects with `FeeValueMustBeNonZero(1)`
@@ -29,10 +35,6 @@ import { readFileSync } from "fs";
 import path from "path";
 
 const CONTRACT_PATH = "contracts/westphalia.py";
-
-// The GenLayer local simulator's chain id. Inlined instead of imported from
-// genlayer-js/chains so this script stays dependency-free.
-const LOCALNET_CHAIN_ID = 61127;
 
 // The consensus round is slow by design: a deploy waits for the transaction to
 // be decided, not merely submitted.
@@ -57,7 +59,6 @@ interface TransactionFees {
 }
 
 interface DeployClient {
-  chain: { id: number };
   initializeConsensusSmartContract(): Promise<void>;
   estimateTransactionFees(input: Record<string, never>): Promise<TransactionFees>;
   deployContract(input: {
@@ -88,10 +89,24 @@ function isSuccessfulDeploymentReceipt(receipt: DeployReceipt): boolean {
   );
 }
 
-function contractAddressFrom(receipt: DeployReceipt, chainId: number): string | undefined {
-  return chainId === LOCALNET_CHAIN_ID
-    ? receipt.data?.contract_address
-    : receipt.txDataDecoded?.contractAddress;
+function contractAddressFrom(receipt: DeployReceipt): string | undefined {
+  // Decoded transaction data is the shape hosted networks return and the
+  // simulator does not.
+  const decoded = receipt.txDataDecoded?.contractAddress;
+  if (decoded) return decoded;
+
+  // `data` is where the simulator puts it, and where this CLI puts it on hosted
+  // networks too. Checked for both chain types, because the deploy itself has
+  // already succeeded by this point: a missed field here reports a failure for
+  // a deploy that worked.
+  const fromData = receipt.data?.contract_address;
+  if (fromData) return fromData;
+
+  // Last resort, so a future receipt shape is reported rather than silently
+  // swallowed as "no address".
+  const raw = receipt as unknown as Record<string, unknown>;
+  const direct = raw.contractAddress ?? raw.contract_address;
+  return typeof direct === "string" ? direct : undefined;
 }
 
 export default async function main(client: DeployClient): Promise<string> {
@@ -118,7 +133,7 @@ export default async function main(client: DeployClient): Promise<string> {
     throw new Error(`Deployment failed. Receipt: ${JSON.stringify(receipt)}`);
   }
 
-  const address = contractAddressFrom(receipt, client.chain.id);
+  const address = contractAddressFrom(receipt);
   if (!address) {
     throw new Error(
       `Deployment receipt carried no contract address. Receipt: ${JSON.stringify(receipt)}`,

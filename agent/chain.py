@@ -5,7 +5,6 @@ account and one contract address.
 """
 
 import base64
-import hashlib
 import json
 import time
 from typing import cast
@@ -14,8 +13,8 @@ from eth_typing import ChecksumAddress
 from genlayer_py import create_client
 from genlayer_py.chains import studio_devnet  # type: ignore[reportAttributeAccessIssue]
 
-# Westphalia V4.1.1 contract deployed on GenLayer Studio Next (valid EIP-55 checksum).
-CONTRACT = cast(ChecksumAddress, "0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8")
+# Westphalia V4.2 contract deployed on GenLayer Studio Next (valid EIP-55 checksum).
+CONTRACT = cast(ChecksumAddress, "0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E")
 
 _OK_EXEC = "FINISHED_WITH_RETURN"
 _OK_CONSENSUS = "MAJORITY_AGREE"
@@ -227,18 +226,24 @@ class Chain:
         treaty_id: int,
         allegation: str,
         evidence_uri: str,
+        evidence_hash: str,
         bond_wei: int | None = None,
     ) -> str | None:
         """Open a dispute on `treaty_id` and return the tier consensus reached.
 
-        The evidence hash is derived from the allegation so it is stable across
-        retries -- the contract's replay lock canonicalizes it, and a hash that
-        churned per attempt would defeat the lock rather than satisfy it.
+        `evidence_hash` is the SHA-256 of the document `evidence_uri` actually
+        serves, read by the caller from the same URL the contract will fetch (see
+        ``telemetry.evidence_digest``). It is a COMMITMENT, not a label: the
+        non-deterministic round admits the document only when it hashes to this
+        value, so a digest derived from anything else -- the treaty id, the
+        allegation, a paraphrase of the report -- makes the filing's own evidence
+        inadmissible and the dispute is adjudicated on NO_EVIDENCE.
+
+        It is passed in rather than derived here because reading the document is
+        I/O with a failure mode the caller must handle: this layer transports the
+        filing, it does not decide what the filing commits to.
         """
         bond = self.required_dispute_bond() if bond_wei is None else bond_wei
-        evidence_hash = hashlib.sha256(
-            f"{treaty_id}|{allegation}|{evidence_uri}".encode()
-        ).hexdigest()
         receipt = self.write(
             "trigger_dispute",
             args=[treaty_id, allegation, evidence_uri, evidence_hash],

@@ -17,6 +17,7 @@ from .chain import Chain, ChainError
 from .decider import ADAPT_COOLDOWN_S, MAX_OUTREACH_ATTEMPTS, HeuristicDecider
 from .keys import load_or_create
 from .profiles import PROFILES
+from .telemetry import evidence_digest
 
 # ANSI colors for the decision ledger.
 _B = "\033[1m"
@@ -139,19 +140,32 @@ class Agent:
         validators reach equivalence on the verdict. The bond is read from the
         contract rather than assumed, because it scales with this agent's
         reputation and a stale figure reverts before any validator runs.
+
+        The filing also commits to its evidence. V4.2 checks the committed digest
+        against the document the contract fetches, so the report is read here
+        first and hashed exactly as the contract hashes it. A digest that could
+        not be read is not filed at all: committing to an invented one would
+        still be accepted on-chain and then adjudicated on NO_EVIDENCE, recording
+        a wrong verdict permanently rather than failing where it can be seen.
         """
         tid = treaty["_id"]
         bond = self.chain.required_dispute_bond()
+        digest = evidence_digest(evidence_uri)
+        if digest is None:
+            _log(self.name, "DISPUTE",
+                 f"evidence unreadable at {evidence_uri} -- not filing", _R)
+            return None
         _log(self.name, "DISPUTE", f"treaty #{tid} ({treaty['kind']}): {allegation}", _R)
         _log(self.name, "DISPUTE",
              f"posting {bond // 10**18} GEN bond (reputation-scaled)", _Y)
         _log(self.name, "DISPUTE", f"evidence: {evidence_uri}", _D)
+        _log(self.name, "DISPUTE", f"commitment: sha256 {digest}", _D)
         if self.dry_run:
             _log(self.name, "DISPUTE", "(dry-run) skipped transaction", _Y)
             return None
         try:
             self.chain.fund(bond + 100 * 10**18)
-            tier = self.chain.dispute(tid, allegation, evidence_uri, bond_wei=bond)
+            tier = self.chain.dispute(tid, allegation, evidence_uri, digest, bond_wei=bond)
         except ChainError as exc:
             _log(self.name, "DISPUTE", f"failed: {exc}", _R)
             return None

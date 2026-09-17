@@ -1,7 +1,7 @@
 # v0.3.0
 # { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 
-# Westphalia Diplomatic Protocol - V4.1.1 (production-grade sovereign diplomacy).
+# Westphalia Diplomatic Protocol - V4.2 (production-grade sovereign diplomacy).
 # On-chain multi-LLM consensus protocol using GenVM equivalence validation.
 # Autonomous AI agents found sovereign enclaves, lock typed bilateral treaty
 # bonds, and resolve disputes through GenLayer validator quorum under the
@@ -11,7 +11,14 @@
 # (gl.message.value / self.balance / gl.chain.Account.emit_transfer); there
 # is no off-chain sandbox and no simulated balance shadow.
 #
-# V4.1.1 (this revision): 404 RENDER GATE -- the evidence reader verifies a 2xx
+# V4.2 (this revision): CRYPTOGRAPHIC EVIDENCE HASH BINDING -- the plaintiff's
+# `evidence_hash` is now verified against the document the contract actually
+# fetched, inside the non-deterministic round. A disputed document whose SHA-256
+# does not match the committed digest is not evidence, so the on-chain record
+# commits to exactly the bytes the tribunal read and no validator can be argued
+# into ruling on a different document than the one the filing named.
+#
+# V4.1.1: 404 RENDER GATE -- the evidence reader verifies a 2xx
 # status with a plain GET before it reads rendered text, because
 # `gl.nondet.web.render` exposes no HTTP status and an error page therefore
 # registered as a readable document. `evidence_present` feeds the clamp's third
@@ -48,6 +55,7 @@
 # variable dispute bonds, anti-Sybil bond caps + enclave maturation delay,
 # and amicable mutual dissolution.
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -194,11 +202,21 @@ def _sanitize(s: str) -> str:
 
 
 def _canon_hash(h: str) -> str:
-    """Canonicalize an evidence hash for the replay index: ASCII-sanitize,
-    lowercase, and strip ALL whitespace so case/whitespace mutations cannot
-    bypass the deterministic replay lock."""
+    """Canonicalize an evidence hash: ASCII-sanitize, lowercase, strip ALL
+    whitespace (so case/whitespace mutations cannot bypass the deterministic
+    replay lock), and drop a leading ``0x``.
+
+    The prefix matters because this function now serves two masters. The replay
+    index only needs a stable spelling, but the evidence binding compares its
+    result against ``hashlib.sha256(...).hexdigest()``, which never carries a
+    prefix. Without the strip, a plaintiff who wrote ``0x<digest>`` -- the
+    spelling every wallet and block explorer uses -- would be rejected for a
+    reason that has nothing to do with its document."""
     base = _sanitize(h).lower()
-    return "".join(base.split())
+    canon = "".join(base.split())
+    if canon.startswith("0x"):
+        canon = canon[2:]
+    return canon
 
 
 def _hostname(url: str) -> str:
@@ -597,7 +615,25 @@ def _get_evidence_text(url: str) -> str | None:
     return body if isinstance(body, str) else None
 
 
-def _fetch_evidence(evidence_uri: str) -> str:
+def _evidence_digest(body: str) -> str:
+    """SHA-256 of the fetched document, as lowercase hex with no prefix.
+
+    The digest is taken over the RAW 2xx response body -- the bytes the server
+    actually served -- and not over the rendered, sanitized, truncated text the
+    tribunal reads. That choice is what makes the binding reproducible off-chain:
+    any client can verify it with one plain HTTP GET and a stock SHA-256, with no
+    need to mirror this contract's sanitizer, its 1,500-character truncation
+    budget, or the runner's decision to render a page rather than read it. The
+    commitment therefore covers the document itself, which is the thing the
+    filing names and the thing every validator must have fetched.
+
+    Decoding mirrors _get_evidence_text exactly (utf-8, replacement characters
+    for invalid sequences) before re-encoding, so the digest is a pure function
+    of the response bytes for any well-formed utf-8 document."""
+    return hashlib.sha256(body.encode("utf-8")).hexdigest().lower()
+
+
+def _fetch_evidence(evidence_uri: str, expected_hash: str) -> str:
     """Read the DEFENDANT's actual evidence document on-chain so the tribunal
     reasons over real incident reports / audit logs / downtime notices instead of
     an opaque URI. Only http(s) URLs that pass the SSRF guard are fetched; a
@@ -605,6 +641,15 @@ def _fetch_evidence(evidence_uri: str) -> str:
     document that cannot be read at all yield the NO_EVIDENCE sentinel. The text
     is sanitized and truncated to EVIDENCE_MAX_CHARS. Runs only inside the nondet
     closure.
+
+    Hash binding (V4.2): `expected_hash` is the digest the plaintiff committed to
+    when it filed. It is checked against the RAW 2xx body -- see
+    _evidence_digest for why the raw body and not the prompt text -- and a
+    document that does not hash to it is NO_EVIDENCE, exactly like a document
+    that could not be read. An empty `expected_hash` is not a bypass: naming a
+    document is now the act of committing to it, and callers that pass nothing
+    get no evidence. `trigger_dispute` already rejects an empty hash before the
+    round begins, so this is a second layer rather than the only one.
 
     Read order (V4.1.1): the plain GET runs FIRST as a status gate, and render
     supplies the prose only once the gate has passed.
@@ -638,6 +683,11 @@ def _fetch_evidence(evidence_uri: str) -> str:
     # Status gate. Only a 2xx GET proves a document is actually served.
     body = _get_evidence_text(evidence_uri)
     if body is None:
+        return NO_EVIDENCE
+
+    # Document gate. The served bytes must be the bytes the filing named.
+    expected = _canon_hash(expected_hash)
+    if expected == "" or _evidence_digest(body) != expected:
         return NO_EVIDENCE
 
     rendered = _render_evidence_text(evidence_uri)
@@ -1363,7 +1413,14 @@ class Westphalia(gl.contract.Contract):
     ) -> str:
         """Adjudicate against the TREATY-BOUND oracles. Telemetry URLs are read
         from treaty storage only; the caller has no way to supply or override
-        them, which closes the forged-oracle attack vector."""
+        them, which closes the forged-oracle attack vector.
+
+        `evidence_hash` is a commitment, not a label. It is recorded in the
+        replay index AND checked inside the non-deterministic round against the
+        SHA-256 of the document the contract actually fetched, so the filing
+        names the bytes the tribunal rules on. A filing whose document does not
+        match is adjudicated on NO_EVIDENCE rather than on whatever the URL
+        happened to serve."""
         # --- Deterministic pre-consensus invariants (BEFORE any nondet) -----
         if treaty_id not in self.treaties:
             raise gl.vm.UserError(f"{ERR_STATE} unknown treaty")
@@ -1418,6 +1475,7 @@ class Westphalia(gl.contract.Contract):
             _sanitize(allegation_text),
             t.terms,
             _sanitize(evidence_uri),
+            canon,
             t.params_json,
             t.oracle_primary,
             t.oracle_secondary,
@@ -1519,7 +1577,8 @@ class Westphalia(gl.contract.Contract):
 
     def _adjudicate(
         self, kind: str, allegation: str, terms: str, evidence_uri: str,
-        params_json: str, primary_url: str, secondary_url: str, target_role: str,
+        evidence_hash: str, params_json: str, primary_url: str,
+        secondary_url: str, target_role: str,
     ) -> str:
         """Runs the semantic multi-LLM judicial round for the DEFENDANT
         (``target_role``). The leader reads the DEFENDANT's dual telemetry AND the
@@ -1540,7 +1599,9 @@ class Westphalia(gl.contract.Contract):
                 return FEED_CONFLICT
             # Read the actual evidence document so the tribunal reasons over real
             # content rather than an opaque URI (unstructured on-chain web read).
-            evidence_text = _fetch_evidence(evidence_uri)
+            # The plaintiff's committed digest is checked inside, so the document
+            # the tribunal weighs is provably the document the filing named.
+            evidence_text = _fetch_evidence(evidence_uri, evidence_hash)
             evidence_present = evidence_text != NO_EVIDENCE
             prompt = _build_prompt(
                 kind, terms, params_json, target_role,

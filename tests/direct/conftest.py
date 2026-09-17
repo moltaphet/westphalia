@@ -4,6 +4,7 @@ Pure-ASCII. Uses the genlayer-test pytest plugin fixtures: direct_vm,
 direct_deploy, direct_alice, direct_bob, direct_charlie.
 """
 
+import hashlib
 import json
 import time
 from datetime import datetime, timezone
@@ -93,11 +94,25 @@ def mock_verdict(direct_vm, tier: str, rationale: str = "Judicial reasoning for 
     direct_vm.mock_llm(r".*", json.dumps(json.dumps(payload)))
 
 
-def mock_evidence(direct_vm, pattern: str, text: str, status: int = 200):
+def evidence_digest(text: str) -> str:
+    """The SHA-256 the contract computes over the RAW body it fetches, in the
+    spelling trigger_dispute records: lowercase hex, no 0x prefix. This is what a
+    plaintiff hands the contract as `evidence_hash`, and what V4.2 checks inside
+    the non-deterministic round before any document is admitted."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest().lower()
+
+
+def mock_evidence(direct_vm, pattern: str, text: str, status: int = 200) -> str:
     """Mock an external evidence document the contract reads on-chain via
     gl.nondet.web.get(evidence_uri). `pattern` is a regex matched against the
-    evidence URL; keep it disjoint from the telemetry-oracle mock patterns."""
+    evidence URL; keep it disjoint from the telemetry-oracle mock patterns.
+
+    Returns the digest that admits this body, so a caller can pass it straight
+    through as `evidence_hash` and the test exercises the adjudication path
+    rather than the document gate. A caller testing the gate itself passes
+    something else on purpose."""
     direct_vm.mock_web(pattern, {"status": status, "body": text})
+    return evidence_digest(text)
 
 
 def fund(direct_vm, who, amount=10_000 * ATTO):

@@ -26,7 +26,7 @@ import time
 from .agent import Agent
 from .keys import load_or_create
 from .profiles import ALICE, BOB
-from .telemetry import BREACH_FEEDS, agreed_bps
+from .telemetry import BREACH_FEEDS, agreed_bps, evidence_digest
 
 # Consensus rounds on studio-dev take a few seconds; keep the pauses generous
 # so every tx is decided before the counterparty reasons over fresh state.
@@ -179,11 +179,23 @@ def main() -> None:
         print(f"      {url}")
     print(f"    agreed reading: {agreed_bps(BREACH_FEEDS)} bps breach "
           f"(critical threshold 7500)")
+    # V4.2: the filing commits to the DOCUMENT, not to a label for it. Alice
+    # hashes the report the contract will fetch and puts that digest on-chain;
+    # the non-deterministic round then admits the document only if it hashes to
+    # the same value. Printing it here makes the binding checkable from outside:
+    # anyone can re-run this SHA-256 over the same URL and compare.
+    digest = evidence_digest(BREACH_FEEDS[0])
+    if digest is None:
+        print(f"    evidence unreadable at {BREACH_FEEDS[0]} -- cannot file")
+    else:
+        print(f"    evidence commitment: sha256 {digest}")
     disputed = _active_treaty(alice, bob_acct.address)
     if args.no_adjudicate:
         print("    --no-adjudicate: stopping before the dispute")
     elif disputed is None:
         print("    no ACTIVE treaty to dispute -- skipping arbitration")
+    elif digest is None:
+        print("    skipping arbitration: the filing has no readable evidence")
     else:
         alice.adjudicate(disputed, ALLEGATION, BREACH_FEEDS[0])
         time.sleep(SETTLE_S)

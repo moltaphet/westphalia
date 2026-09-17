@@ -119,7 +119,7 @@ def test_semantic_evidence_cannot_lift_zero_telemetry(direct_vm, direct_deploy, 
         "unannounced migration with no failover; counterparties received "
         "corrupted price data throughout the window.\n"
     )
-    mock_evidence(direct_vm, r".*audit-log\.example.*", incident)
+    doc_hash = mock_evidence(direct_vm, r".*audit-log\.example.*", incident)
     # Resolves only if the report's own prose is in the prompt: this is what makes
     # the on-chain evidence read load-bearing rather than assumed.
     direct_vm.mock_llm(
@@ -136,7 +136,7 @@ def test_semantic_evidence_cannot_lift_zero_telemetry(direct_vm, direct_deploy, 
         tid,
         "Defendant breached the covenant's uptime SLA",
         "https://audit-log.example/incident-42.md",
-        "hsem1",
+        doc_hash,
     )
     direct_vm.value = 0
 

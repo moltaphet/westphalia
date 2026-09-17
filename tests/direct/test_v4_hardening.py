@@ -33,7 +33,9 @@ from conftest import (
     party_telemetry,
     mock_telemetry,
     mock_evidence,
+    evidence_digest,
     mock_verdict,
+    add_treaty,
 )
 
 VALIDATION_FEE = 5 * ATTO
@@ -69,13 +71,15 @@ def test_low_telemetry_critical_with_evidence_capped_to_elevated(direct_vm, dire
 
     # Telemetry oracles (on *.westphalia.io) report 1000 bps for the defendant.
     direct_vm.mock_web(r".*westphalia\.io.*", party_telemetry(0.0, 0.1))
-    mock_evidence(direct_vm, r".*audit-log\.example.*", "Sustained partial SLA breach observed over 4h.")
+    doc_hash = mock_evidence(
+        direct_vm, r".*audit-log\.example.*", "Sustained partial SLA breach observed over 4h."
+    )
     mock_verdict(direct_vm, "CRITICAL_BREACH")
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     verdict = c.trigger_dispute(
-        tid, "breach with evidence", "https://audit-log.example/case.md", "hv4b"
+        tid, "breach with evidence", "https://audit-log.example/case.md", doc_hash
     )
     direct_vm.value = 0
 
@@ -152,7 +156,8 @@ def test_negligible_telemetry_critical_with_evidence_floored_to_normal(direct_vm
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     verdict = c.trigger_dispute(
-        tid, "breach with a document", "https://audit-log.example/case.md", "hv41a"
+        tid, "breach with a document", "https://audit-log.example/case.md",
+        evidence_digest("A log that reads as real evidence."),
     )
     direct_vm.value = 0
 
@@ -177,7 +182,8 @@ def test_negligible_telemetry_elevated_with_evidence_floored_to_normal(direct_vm
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     verdict = c.trigger_dispute(
-        tid, "risk with a document", "https://audit-log.example/case.md", "hv41b"
+        tid, "risk with a document", "https://audit-log.example/case.md",
+        evidence_digest("A log that reads as real evidence."),
     )
     direct_vm.value = 0
 
@@ -255,24 +261,25 @@ def test_error_status_page_is_never_accepted_as_evidence(direct_vm, direct_deplo
 
     V4.1.1 gates on a plain GET first. The mock serves a plausible-looking error
     body at status 404, which is what a real misconfigured host returns, so this
-    fails if the gate is ever removed or moved after the render."""
+    fails if the gate is ever removed or moved after the render.
+
+    The body's own digest is supplied as evidence_hash on purpose, so the only
+    thing that can reject this document is its STATUS. If the binding were doing
+    the rejecting, this test would pass with the status gate removed."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
     bob = khex(c, direct_vm, direct_bob)
 
     direct_vm.mock_web(r".*westphalia\.io.*", party_telemetry(0.0, 0.1))  # 1000 bps
-    mock_evidence(
-        direct_vm,
-        r".*audit-log\.example.*",
-        "404 Not Found\n\nThe requested incident report does not exist on this server.",
-        status=404,
-    )
+    err404 = "404 Not Found\n\nThe requested incident report does not exist on this server."
+    mock_evidence(direct_vm, r".*audit-log\.example.*", err404, status=404)
     mock_verdict(direct_vm, "CRITICAL_BREACH")
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     verdict = c.trigger_dispute(
-        tid, "breach backed by a dead link", "https://audit-log.example/missing.md", "hv411a"
+        tid, "breach backed by a dead link", "https://audit-log.example/missing.md",
+        evidence_digest(err404),
     )
     direct_vm.value = 0
 
@@ -292,18 +299,15 @@ def test_server_error_page_is_never_accepted_as_evidence(direct_vm, direct_deplo
     bob = khex(c, direct_vm, direct_bob)
 
     direct_vm.mock_web(r".*westphalia\.io.*", party_telemetry(0.0, 0.1))  # 1000 bps
-    mock_evidence(
-        direct_vm,
-        r".*audit-log\.example.*",
-        "500 Internal Server Error\n\nupstream connection refused",
-        status=500,
-    )
+    err500 = "500 Internal Server Error\n\nupstream connection refused"
+    mock_evidence(direct_vm, r".*audit-log\.example.*", err500, status=500)
     mock_verdict(direct_vm, "CRITICAL_BREACH")
 
     direct_vm.sender = direct_alice
     direct_vm.value = MIN_DISPUTE
     verdict = c.trigger_dispute(
-        tid, "breach backed by a dead host", "https://audit-log.example/down.md", "hv411b"
+        tid, "breach backed by a dead host", "https://audit-log.example/down.md",
+        evidence_digest(err500),
     )
     direct_vm.value = 0
 
@@ -350,3 +354,119 @@ def test_prompt_tag_isolation_neutralizes_forged_closing_tag(direct_vm, direct_d
     direct_vm.value = 0
 
     assert verdict == "NORMAL"
+
+
+# --- V4.2 cryptographic evidence hash binding --------------------------------
+def test_evidence_hash_mismatch_falls_back_to_no_evidence(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """A document that does not hash to the digest the filing committed to is
+    NO_EVIDENCE, exactly like a document that could not be read.
+
+    The URL serves a perfectly readable report at 200, so nothing but the
+    binding can reject it: the status gate passed and render would have returned
+    the body. The filing named a different document, so the tribunal is given
+    none. On negligible telemetry that floors the verdict to NORMAL and the
+    defendant keeps its whole bond.
+
+    Asserted through the LLM mock, because the tier alone cannot carry this: at
+    300 bps the outcome is NORMAL whether or not the document was admitted, so a
+    tier-only assertion would pass with the binding removed. The mock below
+    matches ONLY a prompt whose evidence tag carries the NO_EVIDENCE sentinel,
+    so an admitted document matches no mock and the harness fails closed."""
+    c = direct_deploy(CONTRACT)
+    tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
+    bob = khex(c, direct_vm, direct_bob)
+
+    direct_vm.mock_web(r".*westphalia\.io.*", party_telemetry(0.0, 0.03))  # 300 bps
+    mock_evidence(direct_vm, r".*audit-log\.example.*", "A log that reads as real evidence.")
+    direct_vm.mock_llm(
+        r"(?s).*<untrusted_evidence_data>\nNo verifiable external evidence document"
+        r" provided\.\n</untrusted_evidence_data>.*",
+        json.dumps(json.dumps({
+            "verdict": "CRITICAL_BREACH",
+            "rationale": "The tribunal was handed no document to weigh.",
+        })),
+    )
+
+    direct_vm.sender = direct_alice
+    direct_vm.value = MIN_DISPUTE
+    verdict = c.trigger_dispute(
+        tid, "breach with a mismatched document", "https://audit-log.example/case.md",
+        evidence_digest("Some other document entirely."),
+    )
+    direct_vm.value = 0
+
+    assert verdict == "NORMAL"
+    assert c.get_enclave(bob)["status"] == "ACTIVE"
+    assert int(c.get_treaty(tid)["bond_b"]) == BOND
+
+
+def test_evidence_hash_gate_decides_the_verdict(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """The binding is load-bearing, not decorative.
+
+    Two identical treaties, the same served document, the same injected
+    CRITICAL_BREACH verdict, and 1000 bps telemetry -- the band where the
+    presence of evidence is the whole difference between a dismissal and a 25%
+    slash. The only variable is the digest the plaintiff committed to: the
+    matching one admits the document and caps CRITICAL to ELEVATED_RISK, the
+    wrong one yields NO_EVIDENCE and floors it to NORMAL."""
+    c = direct_deploy(CONTRACT)
+    tid_match = active_treaty(c, direct_vm, direct_alice, direct_bob)
+    tid_mismatch = add_treaty(c, direct_vm, direct_alice, direct_bob)
+
+    direct_vm.mock_web(r".*westphalia\.io.*", party_telemetry(0.0, 0.1))  # 1000 bps
+    doc = "Sustained partial SLA breach observed over 4h."
+    doc_hash = mock_evidence(direct_vm, r".*audit-log\.example.*", doc)
+    mock_verdict(direct_vm, "CRITICAL_BREACH")
+
+    direct_vm.sender = direct_alice
+    direct_vm.value = MIN_DISPUTE
+    matched = c.trigger_dispute(
+        tid_match, "breach", "https://audit-log.example/case.md", doc_hash
+    )
+    direct_vm.value = MIN_DISPUTE
+    mismatched = c.trigger_dispute(
+        tid_mismatch, "breach", "https://audit-log.example/case.md",
+        evidence_digest(doc + " "),
+    )
+    direct_vm.value = 0
+
+    assert matched == "ELEVATED_RISK"
+    assert mismatched == "NORMAL"
+    assert int(c.get_treaty(tid_match)["bond_b"]) == BOND - BOND * 25 // 100
+    assert int(c.get_treaty(tid_mismatch)["bond_b"]) == BOND
+
+
+def test_0x_prefixed_digest_is_accepted(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """Every wallet and block explorer prints a digest with a 0x prefix, so that
+    spelling is the one a plaintiff will actually paste. _canon_hash strips it
+    before comparing, so the commitment is judged on the digest and not on its
+    notation -- while case and whitespace mutations still canonicalize away.
+
+    The LLM mock below matches only a prompt that carries the document's prose,
+    so if the prefix were left on the digest the document would be dropped, no
+    mock would match, and the round would revert rather than settle. A plain
+    catch-all verdict mock would not notice the difference."""
+    c = direct_deploy(CONTRACT)
+    tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
+
+    direct_vm.mock_web(r".*westphalia\.io.*", party_telemetry(0.0, 0.1))  # 1000 bps
+    doc = "Sustained partial SLA breach observed over 4h."
+    doc_hash = mock_evidence(direct_vm, r".*audit-log\.example.*", doc)
+    direct_vm.mock_llm(
+        r"(?s).*<untrusted_evidence_data>\nSustained partial SLA breach observed"
+        r" over 4h\.\n</untrusted_evidence_data>.*",
+        json.dumps(json.dumps({
+            "verdict": "CRITICAL_BREACH",
+            "rationale": "The committed document was read and corroborates the report.",
+        })),
+    )
+
+    direct_vm.sender = direct_alice
+    direct_vm.value = MIN_DISPUTE
+    verdict = c.trigger_dispute(
+        tid, "breach", "https://audit-log.example/case.md", "0x" + doc_hash.upper()
+    )
+    direct_vm.value = 0
+
+    assert verdict == "ELEVATED_RISK"
+    assert int(c.get_treaty(tid)["bond_b"]) == BOND - BOND * 25 // 100

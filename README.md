@@ -7,29 +7,30 @@ rendered as an interactive 3D voxel war room.
 
 ![Network: GenLayer Studio Next](https://img.shields.io/badge/network-GenLayer%20Studio%20Next-00E5FF)
 ![Chain ID: 61997](https://img.shields.io/badge/chain%20id-61997-7c3aed)
-![Contract: 0x7781..B3C8](https://img.shields.io/badge/contract-0x7781..B3C8-00FFA3)
-![Direct tests: 76 passing](https://img.shields.io/badge/direct%20tests-76%20passing-2ea043)
+![Contract: 0xdef3..CA1E](https://img.shields.io/badge/contract-0xdef3..CA1E-00FFA3)
+![Direct tests: 79 passing](https://img.shields.io/badge/direct%20tests-79%20passing-2ea043)
 ![genvm-lint: clean](https://img.shields.io/badge/genvm--lint-clean-2ea043)
 ![Runner: py-genlayer v0.3.0](https://img.shields.io/badge/runner-py--genlayer%20v0.3.0-333)
 
 | | |
 |---|---|
-| **Live contract** | [`0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8`](https://explorer-studio-next.genlayer.com/address/0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8) |
+| **Live contract** | [`0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E`](https://explorer-studio-next.genlayer.com/address/0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E) |
 | **Network** | GenLayer Studio Next, chain 61997 |
 | **RPC** | `https://studio-next.genlayer.com/api` |
 | **Explorer** | https://explorer-studio-next.genlayer.com |
 | **Contract source** | [`contracts/westphalia.py`](contracts/westphalia.py) |
 | **Runner** | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
-| **Tests** | 76 direct pytest tests + 24 agent tests passing; `genvm-lint check` clean (23 methods, 11 view / 12 write) |
+| **Tests** | 79 direct pytest tests + 24 agent tests passing; `genvm-lint check` clean (23 methods, 11 view / 12 write) |
 | **Demo video** | [Demo Walkthrough Video - Click to Watch](https://...) |
 | **Reviewer quickstart** | [Quickstart for reviewers](#quickstart-for-reviewers) |
 
 ---
 
-## Audited V4.1.1 -- what makes GenLayer load-bearing
+## Audited V4.2 -- what makes GenLayer load-bearing
 
-Westphalia is a production-hardened V4.1.1, shipped after two adversarial security
-audits, the V4.1 hardening pass, and the V4.1.1 evidence-reader gate. GenLayer is
+Westphalia is a production-hardened V4.2, shipped after two adversarial security
+audits, the V4.1 hardening pass, the V4.1.1 evidence-reader gate, and the V4.2
+evidence hash binding. GenLayer is
 not decoration: the protocol
 **cannot function** without on-chain web reads and multi-LLM consensus, and the
 code layer only backstops the tribunal, it never replaces it.
@@ -47,6 +48,16 @@ code layer only backstops the tribunal, it never replaces it.
   `gl.eq_principle.prompt_comparative`: validators must agree on the **core legal
   judgment**, not on a byte-identical string. A judge that read the evidence and
   the covenant is what decides `CRITICAL_BREACH` vs `ELEVATED_RISK` vs `NORMAL`.
+- **The filing commits to its document.** `evidence_hash` is verified inside the
+  non-deterministic round against the SHA-256 of the bytes the contract actually
+  fetched; a document that does not hash to the committed digest is `NO_EVIDENCE`,
+  exactly like a document that could not be read. The digest covers the **raw 2xx
+  response body** rather than the rendered, sanitized, truncated text the tribunal
+  reads, so anyone can reproduce the commitment with one plain HTTP GET and a stock
+  SHA-256 -- the sanitizer, the 1,500-character budget and the runner's
+  render-vs-GET choice all drop out of the verification. The on-chain record is
+  therefore tied to the exact bytes the tribunal judged, and a validator cannot be
+  argued onto a different document than the one the filing named.
 - The code-side clamp is a **narrow anti-hallucination guardrail, not an
   arithmetic `if/else` replacement**. It draws three corridors around the band
   the objective metric can support: at **2500 bps or above** a breach report can
@@ -783,7 +794,7 @@ contracts/
   westphalia.py           The protocol. 23 public methods.
 
 tests/
-  direct/                 In-memory contract suite (76 tests, ~110s). No network.
+  direct/                 In-memory contract suite (79 tests, ~110s). No network.
     conftest.py           GenVM v0.3 harness wiring.
     test_westphalia.py    9 baseline adversarial cases.
     test_westphalia_v2.py 6 V2 protocol cases.
@@ -796,10 +807,15 @@ tests/
     test_audit2.py        10 second-audit fixes: party-attributed telemetry,
                           independent per-party elevated flags, transfer_governor,
                           strict numeric parsing, semantic evidence adjudication.
-    test_v4_hardening.py  11 V4/V4.1/V4.1.1 corridor and isolation cases: the
-                          three telemetry bands and their boundaries, prompt-tag
-                          isolation, the rationale round-trip, and the 2xx gate
-                          that keeps an error page out of the evidence slot.
+    test_v4_hardening.py  14 V4/V4.1/V4.1.1 corridor and isolation cases plus the
+                          V4.2 binding: the three telemetry bands and their
+                          boundaries, prompt-tag isolation, the rationale
+                          round-trip, the 2xx gate that keeps an error page out
+                          of the evidence slot, and the three cases that pin the
+                          evidence hash as load-bearing -- a mismatched digest
+                          degrades to NO_EVIDENCE, the digest the plaintiff
+                          commits to decides the verdict, and a 0x-prefixed
+                          digest is judged on the digest and not its notation.
   integration/            Full-consensus suite (5 tests). Needs a live network.
     test_westphalia.py    Deploy, found, propose, ratify, dispute, settle.
     fixtures.py           Expected state, kept beside the assertions that read it.
@@ -888,7 +904,7 @@ not observations.
 
 ### Phase V5: bilateral due process and asymmetric dispute windows (*Audi Alteram Partem*)
 
-The current revision (V4.1.1) optimizes for deterministic single-transaction
+The current revision (V4.2) optimizes for deterministic single-transaction
 settlement, which is the right shape for fast agent consensus: a plaintiff files,
 the tribunal reads the defendant's party-attributed telemetry and the plaintiff's
 evidence document, and settlement runs on the same transaction. It is fast -- but
@@ -987,30 +1003,28 @@ the board reads the deployed contract directly. Confirm it yourself:
 - **TOTAL VALUE LOCKED** and the solvency badge are read live from
   `get_protocol_overview` and reconcile against the explorer.
 
-The recorded address is a **fresh genesis deployment**: the board reads it live
-and the command bar badges `ON-CHAIN / EMPTY`, because a new contract
-answers `get_enclave_count` with `0` and holds no enclaves yet. Every figure is
-read live from `get_protocol_overview` and reconciles against the explorer --
-there is simply nothing to total yet.
+The recorded address was **deployed empty and then populated** by running
+`agent/demo` then `agent/seed` against it (`agent/chain.py` points here), so the
+board reads it live and the command bar badges `ON-CHAIN`. Every figure is read
+live from `get_protocol_overview` and reconciles against the explorer.
 
-Running `agent/demo` then `agent/seed` populates it to **six islands** and nine
-treaties (seven ACTIVE), with **TOTAL VALUE LOCKED** reading **4300 GEN (chain)**
-straight from `locked_escrow`. Those two scripts are what put that state there --
-`agent/chain.py` points at this address -- and the same pair reached exactly that
-state from nothing on the previous deployment, because the same source driven by
-the same state-driven scripts converges on the same outcome. That deployment,
-`0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`, still holds its populated state on
-chain, and it is where the recording in
-[`deployments/studio-dev.json`](deployments/studio-dev.json) was read. Running
-the pair against this address is what will put the same state here.
+Those two scripts take it to **six islands** and nine treaties, with **TOTAL
+VALUE LOCKED** reading **4100 GEN (chain)** straight from `locked_escrow`. The
+same pair reached exactly that state from nothing on the previous deployment too,
+because the same source driven by the same state-driven scripts converges on the
+same outcome; that predecessor,
+`0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`, still holds its own copy on chain.
+The recording in [`deployments/studio-dev.json`](deployments/studio-dev.json) is
+read from this address.
 
 ```bash
 .venv/bin/python -m agent.demo       # Halcyon and Meridian, through to a verdict
 .venv/bin/python -m agent.seed       # Vantage, Aegis, Quorum, Solstice + treaties
 ```
 
-A completed run leaves six islands and nine treaties, seven of them ACTIVE, with
-4300 GEN of escrow. The full observed state, read from the chain after the run,
+A completed run leaves six islands and nine treaties, with 4100 GEN of escrow on
+this deployment (one ratification short of the predecessor's 4300 -- see the
+reading note above). The full observed state, read from the chain after the run,
 is in [`deployments/studio-dev.json`](deployments/studio-dev.json).
 
 Reads need no wallet. **Writes do**: clicking a propose/ratify/dispute action
@@ -1032,7 +1046,7 @@ what a healthy quote looks like there.
 ```bash
 uv venv --python 3.12
 uv pip install --prerelease=allow -r requirements.txt
-.venv/bin/python -m pytest -q          # 59 passed
+.venv/bin/python -m pytest -q          # 103 passed
 ```
 
 This runs the contract **in memory** -- no chain, no keys, no network. It covers
@@ -1057,15 +1071,29 @@ the dispute.
 ### Verify the deployment on the explorer
 
 Contract:
-[`0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8`](https://explorer-studio-next.genlayer.com/address/0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8)
+[`0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E`](https://explorer-studio-next.genlayer.com/address/0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E)
 on GenLayer Studio Next (chain 61997).
 
-GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live
-contract and cannot be used to compare deployed bytecode against source. The
-deployment is evidenced instead by live view reads: `get_protocol_overview`
-answers from that address and reports `solvent: true` (all four tracked
-components zero at genesis, so the sum equals `balance`), and the SSRF-guard view
-`is_safe_url("http://127.0.0.1/")` answers `false`.
+GenVM is not an EVM chain, so `eth_getCode` returns `0x` even for a live contract
+and cannot be used to compare deployed bytecode against source. The explorer's
+own API can, though: the deploy transaction carries the contract source it
+submitted, base64-encoded, and hashing the decoded bytes settles the question
+directly rather than by inference.
+
+```bash
+curl -s https://explorer-studio-next.genlayer.com/api/address/$CONTRACT \
+  | python3 -c 'import json,sys,base64,hashlib;
+d=json.load(sys.stdin)["transactions"][0];
+print(hashlib.sha256(base64.b64decode(d["data"]["contract_code"])).hexdigest())'
+```
+
+That digest is `d62c4f0c31eddf26dc223970829f1d0a9bf2045865a09d07393029dcd1621770`
+-- byte-identical to `contracts/westphalia.py` in this tree, so the code running
+at the address above is the code the audit in this document describes.
+
+Live view reads confirm the address is answering: `get_protocol_overview` reports
+`solvent: true` (the four tracked components sum to `balance`), and the
+SSRF-guard view `is_safe_url("http://127.0.0.1/")` answers `false`.
 
 ## 3. Local development
 
@@ -1126,14 +1154,14 @@ wallet: it is chmod 0600 for a reason.
 
 Two runners, for two kinds of test.
 
-**Bare `pytest` runs the offline suites** -- 100 tests, no network, no keys, no
+**Bare `pytest` runs the offline suites** -- 103 tests, no network, no keys, no
 funded account:
 
 ```bash
-# Both suites: 100 tests.
+# Both suites: 103 tests.
 .venv/bin/python -m pytest -q
 
-# Contract only (direct mode): 76 tests, in-memory, ~110s.
+# Contract only (direct mode): 79 tests, in-memory, ~110s.
 .venv/bin/python -m pytest tests/direct/ -q
 
 # Agents only: 24 tests.
@@ -1401,25 +1429,24 @@ not a loud one.
 | Field | Value |
 |---|---|
 | Network | GenLayer Studio Next, chain 61997 |
-| Contract | `0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8` |
-| Explorer | https://explorer-studio-next.genlayer.com/address/0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8 |
+| Contract | `0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E` |
+| Explorer | https://explorer-studio-next.genlayer.com/address/0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E |
 | RPC | `https://studio-next.genlayer.com/api` |
 | Runner | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
 | Source | `contracts/westphalia.py` |
-| Revision | V4.1.1 (audited) -- the V4.1 hardening pass plus the 404 render gate. Full prompt-tag isolation (every litigant-controlled prompt field wrapped in its own sanitized tag), strict telemetry clamping (no `MALICIOUS_REPORT` at/above 2500 bps; no breach finding below 500 bps even with a document attached; no full sanction below 2500 bps), an evidence reader that proves a 2xx document with a plain GET before it renders prose, and semantic multi-LLM adjudication carrying the judicial rationale through the equivalence round. Builds on the V4 audited base; supersedes V4 (`0xa92E...eBED`). |
-| Source SHA-256 (deployed) | `b8fce2a66849da3ac086a39feeb9ed15f9cf6bbe730c7ad158ee80d114cbb1cb` |
-| Source SHA-256 (V4.1.1, in tree) | `b8fce2a66849da3ac086a39feeb9ed15f9cf6bbe730c7ad158ee80d114cbb1cb` |
-| Deploy transaction | `0x395dd24a6b64590ac5dcd5c319c1f7908cef6934a4ff36234f22c0f966340f90`, finalized with consensus `Accepted` |
+| Revision | V4.2 (audited) -- cryptographic evidence hash binding. `evidence_hash` is a commitment, not a replay label: `_fetch_evidence` checks it inside the non-deterministic round against the SHA-256 of the document the contract actually fetched, and a document that does not hash to it is `NO_EVIDENCE`, exactly like a document that could not be read. The digest covers the **raw 2xx response body**, not the rendered / sanitized / truncated text the tribunal reads, so any client can reproduce the commitment with one plain HTTP GET and a stock SHA-256 -- no need to mirror the sanitizer, the 1,500-character budget, or the runner's render-vs-GET choice. `_canon_hash` also strips a leading `0x`, because `hexdigest()` never carries one and every block explorer prints one. Builds on the V4.1.1 audited base (prompt-tag isolation, strict telemetry clamping, the 2xx evidence-reader gate); supersedes V4.1.1 (`0x7781..B3C8`). |
+| Source SHA-256 (deployed) | `d62c4f0c31eddf26dc223970829f1d0a9bf2045865a09d07393029dcd1621770` |
+| Source SHA-256 (V4.2, in tree) | `d62c4f0c31eddf26dc223970829f1d0a9bf2045865a09d07393029dcd1621770` |
+| Deploy transaction | [`0x024e0077f33d17f52c92204c2b7299ffe215521abe845fda062052bbc06c562d`](https://explorer-studio-next.genlayer.com/tx/0x024e0077f33d17f52c92204c2b7299ffe215521abe845fda062052bbc06c562d), submitted 2026-09-17T09:45:04Z, finalized with consensus `Accepted` |
 | Deployer / genesis governor | `0x1f9813eeB2de53134af5C824cA156CE82C4EB0fa` -- `__init__` sets `self.governor = gl.message.sender_address`, so `drain_reserves` and `transfer_governor` are that key's alone |
 
-> **Deployment status.** The address above runs V4.1.1, the revision in this
+> **Deployment status.** The address above runs V4.2, the revision in this
 > tree: the deployed hash and the in-tree hash are the same file, listed twice so
-> the invariant is visible rather than asserted. The tree is at **genesis** on
-> that address -- deployed empty, with no agent run against it yet -- so the
-> counters in the next section belong to the V4 predecessor
-> `0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`, which still holds that state on
-> chain. Running `agent.demo` then `agent.seed` against this address reproduces
-> it here; the recorded state below is not restated against an empty contract.
+> the invariant is visible rather than asserted, and the explorer's own deploy
+> transaction confirms it independently (see the code-identity check in section
+> 2). The address was deployed empty and populated by running `agent.demo` then
+> `agent.seed` against it, so the counters in the next section are this
+> deployment's own, read from the chain rather than carried over.
 
 Full observed state, at deploy time and at the current head, is recorded in
 [`deployments/studio-dev.json`](deployments/studio-dev.json). That file is the
@@ -1430,18 +1457,18 @@ authoritative record; it is updated by reading the chain, never by hand.
 Every revision in this tree deploys empty (`get_enclave_count == 0`). Running
 `agent.demo` then `agent.seed` against a fresh address reproduces the state below
 -- the same source driven by the same state-driven scripts converges on the same
-outcome. The counters were read live from the V4 predecessor
-`0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`, which ran those two scripts and
-then one adjudication to completion, which is why `reserves` below is no longer
-zero: the demo's `CRITICAL_BREACH` verdict sanctions the defendant, moving its
-150 GEN collateral into reserves and zeroing its bond. The snapshot is preserved
-in [`deployments/studio-dev.json`](deployments/studio-dev.json).
+outcome. The counters were read live from the deployed address above, which ran
+those two scripts and then one adjudication to completion, which is why
+`reserves` below is no longer zero: the demo's `CRITICAL_BREACH` verdict
+sanctions the defendant, moving its 150 GEN collateral into reserves and zeroing
+its bond. The snapshot is preserved in
+[`deployments/studio-dev.json`](deployments/studio-dev.json).
 
 | Counter | Value |
 |---|---|
-| `balance` | 6700 GEN |
+| `balance` | 6500 GEN |
 | `total_collateral` | 750 GEN |
-| `locked_escrow` | 4300 GEN |
+| `locked_escrow` | 4100 GEN |
 | `reserves` | 150 GEN |
 | `total_claimable` | 1500 GEN |
 | `next_treaty_id` | 10 |
@@ -1449,7 +1476,16 @@ in [`deployments/studio-dev.json`](deployments/studio-dev.json).
 | `solvent` | `true` |
 
 The solvency identity holds on that snapshot:
-`750 + 4300 + 150 + 1500 == 6700`, exactly the contract's own balance.
+`750 + 4100 + 150 + 1500 == 6500`, exactly the contract's own balance.
+
+> **Reading note.** These counters were read live from the deployed address. The
+> per-treaty breakdown is short one ratification: `agent.seed` proposed treaty #9
+> and the counterparty matched the bond, but the local faucet rate-limited
+> (`Rate limit exceeded: 500 requests per hour`) before the deposit landed, so
+> #9 stands `PROPOSED` rather than `ACTIVE` and its second bond is not in
+> `locked_escrow`. That is the whole of the 200 GEN difference from the
+> predecessor's 4300. Re-running `agent.seed` against the same address resumes
+> it -- the script is state-driven and submits nothing twice.
 
 The roster, in the order the contract enumerates it:
 
@@ -1471,7 +1507,7 @@ validators read the treaty's own oracles inside consensus, agreed on
 `CRITICAL_BREACH`, and settlement released both bonds -- which is why Halcyon
 holds 1500 GEN claimable and Meridian's reputation reads 0 and `SANCTIONED`.
 Treaty #1 is Halcyon's rejected opening offer, still standing with its 700 GEN
-bond; it is the case `cancel_proposal` exists for, and it is 700 of the 4300 GEN
+bond; it is the case `cancel_proposal` exists for, and it is 700 of the 4100 GEN
 of escrow.
 
 Every one of the six is party to at least one treaty, so this state does not by
@@ -1485,32 +1521,38 @@ against it. The deploy-time reading is in
 [`deployments/studio-dev.json`](deployments/studio-dev.json) under
 `verification.observed_at_deploy`, and the head reading above under
 `observed_at_current_head`. The figures match what the superseded V3.1
-deployment reached from the same starting state -- six sovereignties, nine
-treaties, `900 + 4300 + 0 + 1500 == 6700` -- which is the expected result rather
-than a coincidence: the same source driven by the same state-driven scripts
-converges on the same protocol outcome. That predecessor is carried under
-`predecessors`, and it was superseded because it predates the roster index, not
-because anything in it failed.
+deployment reached from the same starting state -- which is the expected result
+rather than a coincidence: the same source driven by the same state-driven
+scripts converges on the same protocol outcome. That predecessor is carried
+under `predecessors`, and it was superseded because it predates the roster
+index, not because anything in it failed.
 
-The current address `0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8` is at the same
-starting line that one began from, and is carried as the head of
-`predecessors` in the same file.
+The **V4.2** revision is deployed at
+`0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E` and was populated by running the
+same two scripts against it. Its `agent.demo` run is the V4.2 binding's
+end-to-end proof on a live network: the plaintiff committed to
+`sha256 b1201e61421c3baab5774546dfb812b61fe48bad0be804f7419f4d8bc349407b`, the
+contract re-fetched that document inside the non-deterministic round, the digest
+matched, and the tribunal returned `CRITICAL_BREACH` -- so the committed digest
+and the document the validators judged were provably the same bytes. A filing
+whose digest does not match is adjudicated on `NO_EVIDENCE` instead, which is
+what `test_evidence_hash_gate_decides_the_verdict` pins in the direct suite.
 
 ## B. Verification log
 
 | Check | Command | Result |
 |---|---|---|
 | Contract lint | `.venv/bin/genvm-lint check contracts/westphalia.py` | Lint and validation both pass; 23 methods (11 view, 12 write). |
-| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 76 passed. |
+| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 79 passed. |
 | Agent tests | `.venv/bin/python -m pytest agent/ -q` | 24 passed. |
-| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 100 collected (76 direct + 24 agent). |
+| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 103 collected (79 direct + 24 agent). |
 | Type check | `cd frontend && npx tsc --noEmit` | Exit 0, clean. |
 | Lint | `cd frontend && npx eslint . --max-warnings=0` | Exit 0, no warnings. |
 | Production build | `cd frontend && npm run build` | 0 TypeScript, lint, and SSR/Canvas errors. |
 | ABI fidelity | `DIPLOMATIC_ABI` entries vs `contracts/westphalia.py` public methods | 23 == 23, name-for-name identical (11 view / 4 payable / 8 nonpayable). |
-| Deployment binding | Live view reads on the recorded address | The current address answers `get_protocol_overview` with `solvent: true` and `get_enclave_count` with `0` (genesis), and `is_safe_url("http://127.0.0.1/")` with `false`. The populated snapshot it will reach under `agent.demo` + `agent.seed` is the one recorded in [`deployments/studio-dev.json`](deployments/studio-dev.json), read from the V4 predecessor. |
+| Deployment binding | Live view reads on the recorded address | The address answers `get_protocol_overview` with `solvent: true`, `is_safe_url("http://127.0.0.1:4000/")` with `false`, and `sanitize_preview("<x>")` with `[x]`. The populated snapshot it reaches under `agent.demo` + `agent.seed` is recorded in [`deployments/studio-dev.json`](deployments/studio-dev.json). |
 | Write path | `found_sovereignty` on chain 61997 | Receipt `FINISHED_WITH_RETURN`; collateral moved; `get_enclave` returns the record. |
-| End-to-end | `.venv/bin/python -m agent.demo` | Full lifecycle to a `CRITICAL_BREACH` verdict; escrow settled; reputation rewritten. |
+| End-to-end | `.venv/bin/python -m agent.demo` | Full lifecycle to a `CRITICAL_BREACH` verdict; the evidence commitment (`sha256 b1201e61...`) verified in-round against the fetched document; escrow settled; reputation rewritten. |
 | ASCII purity | every tracked file | All UI labels, code, variables, and comments are pure ASCII English. |
 
 The board rows below were captured against the **populated** deployment, before

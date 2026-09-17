@@ -39,7 +39,7 @@ export function networkByChainId(chainId: number): NetworkConfig | undefined {
 // deployment is a config change, not a code change.
 export const DIPLOMATIC_CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_DIPLOMATIC_CONTRACT_ADDRESS ??
-  "0x77810496d9a53c3c751E9E26Cf7191C71bDDB3C8";
+  "0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E";
 
 // A genlayer-js chain object, as viem consumes it.
 //

@@ -27,9 +27,16 @@ The metric is quantized contract-side (``_quantize_bps``) into integer basis
 points, so the LLM sees a stable integer either way.
 """
 
+import hashlib
+import urllib.request
+
 # GitHub repository the static telemetry documents are committed to.
 _REPO = "moltaphet/westphalia"
 _BRANCH = "main"
+
+# raw.githubusercontent.com serves the file to any client, but identifying
+# ourselves is the polite default for a public CDN.
+_UA = "westphalia-agent/1.0"
 
 # Two INDEPENDENT, publicly reachable feed hosts (the contract requires distinct
 # hostnames; both serve the same committed telemetry/*.json).
@@ -89,3 +96,33 @@ def agreed_bps(feeds: tuple[str, str], target_role: str = "party_b") -> int:
     if not vals:
         return 0
     return sum(bps_of(v) for v in vals) // len(vals)
+
+
+def evidence_digest(url: str, timeout: float = 20.0) -> str | None:
+    """The evidence commitment for `url`: the SHA-256 the contract will recompute
+    over the document it fetches, as lowercase hex with no prefix. Returns None
+    when this machine cannot read the document.
+
+    V4.2 makes ``evidence_hash`` a commitment verified inside the
+    non-deterministic round, so a filing is admissible only when its hash equals
+    the digest of the bytes the contract itself fetched. This derives that same
+    number from those same bytes: a plain 2xx GET, decoded as utf-8 with
+    replacement characters for invalid sequences -- exactly what the contract's
+    ``_get_evidence_text`` does before ``_evidence_digest`` hashes it -- so the
+    commitment covers the document and not this client's reading of it.
+
+    None is a real answer, not a nuisance: a digest cannot be invented for a
+    document nobody has read. A filing that committed to a fabricated hash would
+    still be accepted on-chain and then adjudicated on NO_EVIDENCE, which is a
+    wrong verdict recorded permanently. The caller aborts instead."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _UA})
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            if not (200 <= res.status < 300):
+                return None
+            raw = res.read()
+    except Exception:
+        return None
+    text = raw.decode("utf-8", "replace")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest().lower()
+
