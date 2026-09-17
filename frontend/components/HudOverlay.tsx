@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ChevronLeft,
@@ -807,16 +807,17 @@ function ProposeModal({
 // carry could never have passed it -- the call would have reverted with
 // ERR_UNSAFE_TELEMETRY_URL before the tribunal was ever empaneled.
 //
-// The digest is a commitment, not a label. Whatever ends up in the hash field
-// has to be the SHA-256 of the bytes the URI actually serves (`curl -s <uri> |
-// sha256sum`), because the contract re-reads the document inside the consensus
-// round and adjudicates NO_EVIDENCE when the two disagree. The default below is
-// a well-formed sample for the recording and matches no real endpoint.
+// The digest is a commitment, not a label: it has to be the SHA-256 of the bytes
+// the URI actually serves, because the contract re-reads the document inside the
+// consensus round and adjudicates NO_EVIDENCE when the two disagree. So this
+// modal ships no sample digest for a filing to commit to blindly -- it reads the
+// document and derives the number, the way `agent/telemetry.py:evidence_digest`
+// derives it for the agent side. The default URI is the telemetry document this
+// repository commits and the recorded run filed against, so the pair on open is
+// a real one rather than a well-formed example that matches no endpoint.
 const DISPUTE_ALLEGATION = "Breach of latency threshold on secondary node";
 const DISPUTE_EVIDENCE_URI =
-  "https://raw.githubusercontent.com/incident-reports/telemetry/main/covenant-audit.json";
-const DISPUTE_EVIDENCE_HASH =
-  "4a7c1b89ef23d401a75b28d09f7a9321e05d8bc1946802e3b5df90123456789a";
+  "https://raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/breach_primary.json";
 
 // Mirrors the contract's `_canon_hash`: a leading `0x` and any casing are
 // accepted on the way in, because every explorer prints the digest that way.
@@ -827,12 +828,28 @@ function canonHash(raw: string): string {
   return raw.trim().toLowerCase().replace(/^0x/, "");
 }
 
+// The contract hashes `body.encode("utf-8")` where `body` is the response
+// decoded as utf-8 with replacement characters, so the browser mirrors it by
+// decoding and re-encoding rather than by hashing the raw bytes -- the two
+// differ on a document with invalid sequences.
+async function digestOf(uri: string): Promise<string> {
+  const res = await fetch(uri, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const body = await res.text();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function DisputeModal({
   treaties,
+  preselect,
   onClose,
   onSubmit,
 }: {
   treaties: Treaty[];
+  preselect?: string | null;
   onClose: () => void;
   onSubmit: (
     treatyId: string,
@@ -841,14 +858,44 @@ function DisputeModal({
     evidenceHash: string
   ) => void;
 }) {
-  const [treatyId, setTreatyId] = useState(treaties[0]?.id ?? "");
+  const [treatyId, setTreatyId] = useState(
+    preselect && treaties.some((t) => t.id === preselect) ? preselect : treaties[0]?.id ?? ""
+  );
   const [allegation, setAllegation] = useState(DISPUTE_ALLEGATION);
   const [evidenceUri, setEvidenceUri] = useState(DISPUTE_EVIDENCE_URI);
-  const [evidenceHash, setEvidenceHash] = useState(DISPUTE_EVIDENCE_HASH);
+  const [evidenceHash, setEvidenceHash] = useState("");
+  // The URI the digest in the field was read from, or null once the field has
+  // been typed into -- so the hint can say which of the two it is looking at
+  // instead of assuming the number on screen is the served document's.
+  const [digestUri, setDigestUri] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
 
+  const uri = evidenceUri.trim();
   const hashOk = SHA256_RE.test(canonHash(evidenceHash));
-  const uriOk = HTTP_URI_RE.test(evidenceUri.trim());
+  const uriOk = HTTP_URI_RE.test(uri);
+  const derived = digestUri !== null && digestUri === uri;
   const ready = Boolean(treatyId) && allegation.trim().length > 0 && uriOk && hashOk;
+
+  const derive = useCallback(async (target: string) => {
+    setReading(true);
+    setReadError(null);
+    try {
+      setEvidenceHash(await digestOf(target));
+      setDigestUri(target);
+    } catch (e) {
+      setReadError(e instanceof Error ? e.message : "unreadable");
+    } finally {
+      setReading(false);
+    }
+  }, []);
+
+  // The form opens with the digest already read, so what it submits is a real
+  // commitment from the first frame. A document this browser cannot fetch is
+  // reported and left empty rather than filled with a hash nobody derived.
+  useEffect(() => {
+    void derive(DISPUTE_EVIDENCE_URI);
+  }, [derive]);
 
   return (
     <ModalShell title="TRIGGER DISPUTE" icon={<Swords size={15} className="text-amber-400" />} onClose={onClose}>
@@ -889,15 +936,32 @@ function DisputeModal({
         <input
           className={inputCls}
           value={evidenceHash}
-          onChange={(e) => setEvidenceHash(e.target.value)}
+          onChange={(e) => {
+            setEvidenceHash(e.target.value);
+            setDigestUri(null);
+          }}
         />
+        <button
+          type="button"
+          onClick={() => void derive(uri)}
+          disabled={!uriOk || reading}
+          className="mt-1.5 w-full rounded border border-slate-700 bg-slate-800/70 py-1.5 text-[10px] tracking-widest text-slate-300 hover:border-cyan-500/60 hover:text-slate-100 disabled:opacity-40"
+        >
+          {reading ? "READING DOCUMENT..." : "RE-DERIVE DIGEST FROM URI"}
+        </button>
       </Field>
       <p className="-mt-1 mb-3 text-[10px] leading-relaxed text-slate-500">
         {!uriOk
           ? "The contract fetches the document itself: only an http(s) URI passes its SSRF gate."
-          : !hashOk
-            ? "The hash must be the 64-character SHA-256 of the bytes that URI serves."
-            : "The digest must match the served document, or the filing is adjudicated on NO_EVIDENCE."}
+          : reading
+            ? "Reading the document to derive its digest."
+            : readError
+              ? `This browser could not read that URI (${readError}). Paste the SHA-256 of the served bytes, or point the URI at a document it can reach.`
+              : !hashOk
+                ? "The hash must be the 64-character SHA-256 of the bytes that URI serves."
+                : derived
+                  ? "Read from the URI just now. The contract re-fetches the same document in-round, so the two agree."
+                  : "Typed by hand. If it is not the digest of the served bytes, the filing is adjudicated on NO_EVIDENCE."}
       </p>
       <button
         onClick={() => onSubmit(treatyId, allegation.trim(), evidenceUri.trim(), canonHash(evidenceHash))}
@@ -964,7 +1028,17 @@ export default function HudOverlay({
   onToggleRight,
 }: Props) {
   const [modal, setModal] = useState<ModalKind>(null);
+  const [disputeTarget, setDisputeTarget] = useState<string | null>(null);
   const [auditEvent, setAuditEvent] = useState<LedgerEvent | null>(null);
+
+  // The action bar and the hotkeys open the dispute form with no particular
+  // treaty in mind; a treaty row opens it on itself. Keeping the target in state
+  // rather than filing straight from the row is what lets the form derive the
+  // evidence digest instead of committing to one it was handed.
+  const openModal = useCallback((kind: ModalKind, target: string | null = null) => {
+    setDisputeTarget(target);
+    setModal(kind);
+  }, []);
 
   // Report open state upward so the 3D scene can suppress its Html labels.
   useEffect(() => {
@@ -992,13 +1066,13 @@ export default function HudOverlay({
       }
       if (modal !== null || auditEvent !== null) return;
       const k = e.key.toLowerCase();
-      if (k === "c") setModal("propose");
-      else if (k === "d") setModal("dispute");
-      else if (k === "e") setModal("claim");
+      if (k === "c") openModal("propose");
+      else if (k === "d") openModal("dispute");
+      else if (k === "e") openModal("claim");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [modal, auditEvent]);
+  }, [modal, auditEvent, openModal]);
 
   return (
     <>
@@ -1044,7 +1118,7 @@ export default function HudOverlay({
           onDissolve={onDissolve}
           onExit={onExit}
           onDispute={(id) => {
-            onDispute(id, DISPUTE_ALLEGATION, DISPUTE_EVIDENCE_URI, DISPUTE_EVIDENCE_HASH);
+            openModal("dispute", id);
           }}
         />
 
@@ -1059,7 +1133,7 @@ export default function HudOverlay({
           {rightCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
 
-        <ActionBar onAction={setModal} />
+        <ActionBar onAction={openModal} />
       </div>
 
       {auditEvent && (
@@ -1084,6 +1158,7 @@ export default function HudOverlay({
       {modal === "dispute" && (
         <DisputeModal
           treaties={disputableTreaties}
+          preselect={disputeTarget}
           onClose={() => setModal(null)}
           onSubmit={(id, allegation, evidenceUri, evidenceHash) => {
             onDispute(id, allegation, evidenceUri, evidenceHash);

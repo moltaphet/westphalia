@@ -31,8 +31,11 @@ export const TREATIES: Treaty[] = [
     dispute: {
       validators: 5,
       consensus: 62,
+      // The seeded scene's filing names the same committed telemetry document
+      // the dispute form defaults to, so the URI the panel prints is one the
+      // contract's SSRF gate admits and the contract can actually fetch.
       evidenceUri:
-        "https://raw.githubusercontent.com/incident-reports/telemetry/main/covenant-audit.json",
+        "https://raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/breach_primary.json",
       openedBlock: 1842991,
     },
     terms:
