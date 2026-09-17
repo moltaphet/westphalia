@@ -1478,14 +1478,14 @@ its bond. The snapshot is preserved in
 The solvency identity holds on that snapshot:
 `750 + 4100 + 150 + 1500 == 6500`, exactly the contract's own balance.
 
-> **Reading note.** These counters were read live from the deployed address. The
-> per-treaty breakdown is short one ratification: `agent.seed` proposed treaty #9
-> and the counterparty matched the bond, but the local faucet rate-limited
-> (`Rate limit exceeded: 500 requests per hour`) before the deposit landed, so
-> #9 stands `PROPOSED` rather than `ACTIVE` and its second bond is not in
-> `locked_escrow`. That is the whole of the 200 GEN difference from the
-> predecessor's 4300. Re-running `agent.seed` against the same address resumes
-> it -- the script is state-driven and submits nothing twice.
+> **Reading note.** These counters were read live from the deployed address, as
+> were the roster below and every treaty record. One ratification is missing:
+> `agent.seed` proposed treaty #9 and the counterparty matched the bond, but the
+> local faucet rate-limited (`Rate limit exceeded: 500 requests per hour`) before
+> the deposit landed, so #9 stands `PROPOSED` rather than `ACTIVE` and its second
+> bond is not in `locked_escrow`. That is the whole of the 200 GEN difference
+> from the predecessor's 4300. Re-running `agent.seed` against the same address
+> resumes it -- the script is state-driven and submits nothing twice.
 
 The roster, in the order the contract enumerates it:
 
@@ -1509,6 +1509,23 @@ holds 1500 GEN claimable and Meridian's reputation reads 0 and `SANCTIONED`.
 Treaty #1 is Halcyon's rejected opening offer, still standing with its 700 GEN
 bond; it is the case `cancel_proposal` exists for, and it is 700 of the 4100 GEN
 of escrow.
+
+Nine treaties are on the book -- six ACTIVE, two PROPOSED, one SETTLED:
+
+| # | Kind | Status | `bond_a` | `bond_b` |
+|---|---|---|---|---|
+| 1 | `DATA_SHARING` | PROPOSED | 700 GEN | -- |
+| 2 | `DATA_SHARING` | SETTLED | -- | -- |
+| 3 | `TRADE_CORRIDOR` | ACTIVE | 300 GEN | 300 GEN |
+| 4 | `NON_AGGRESSION` | ACTIVE | 300 GEN | 300 GEN |
+| 5 | `DATA_SHARING` | ACTIVE | 300 GEN | 300 GEN |
+| 6 | `NON_AGGRESSION` | ACTIVE | 300 GEN | 300 GEN |
+| 7 | `DATA_SHARING` | ACTIVE | 200 GEN | 200 GEN |
+| 8 | `NON_AGGRESSION` | ACTIVE | 200 GEN | 200 GEN |
+| 9 | `DATA_SHARING` | PROPOSED | 200 GEN | -- |
+
+The bond columns sum to 4100 GEN -- `locked_escrow` exactly, which is the
+solvency identity above read a second way.
 
 Every one of the six is party to at least one treaty, so this state does not by
 itself exercise the index's headline case -- an enclave that has never been party

@@ -58,8 +58,7 @@
       "sanitize_preview": "[x]"
     },
     "observed_at_current_head": {
-      "note": "Read from the chain after agent.demo and agent.seed were run against this address. The demo reached consensus on CRITICAL_BREACH and settled: Halcyon (plaintiff) was credited 1500 GEN and Meridian (defendant) was sanctioned, its 150 GEN collateral moved to reserves -- which is why reserves is no longer zero. agent.seed then founded the wider roster and wired treaties #3 onward. One ratification did not land: the local faucet rate-limited (Rate limit exceeded: 500 requests per hour) on treaty #9 after the counterparty had matched the bond, so #9 stands PROPOSED and its second bond is not in locked_escrow. That is the whole of the difference from the predecessor's populated snapshot. Re-running .venv/bin/python -m agent.seed against this address resumes it: the script is state-driven and submits nothing twice.",
-      "reading_caveat": "The overview, the enclave count and roster slots 0-1 were read directly. The remaining roster slots and every treaty record were NOT re-enumerated: the same 500-requests-per-hour RPC limit that stopped the seed refused further gen_call reads. The roster below is therefore partial, and treaty status counts are deliberately omitted rather than inferred -- total treaty count (9) is derived from next_treaty_id, which was read.",
+      "note": "Read from the chain after agent.demo and agent.seed were run against this address. The demo reached consensus on CRITICAL_BREACH and settled: Halcyon (plaintiff) was credited 1500 GEN and Meridian (defendant) was sanctioned, its 150 GEN collateral moved to reserves -- which is why reserves is no longer zero. agent.seed then founded the wider roster and wired treaties #3 through #9. One ratification did not land: the local faucet rate-limited (Rate limit exceeded: 500 requests per hour) on treaty #9 after the counterparty had matched the bond, so #9 stands PROPOSED and its 200 GEN second bond is not in locked_escrow. That single missing bond is the whole of the 200 GEN difference from the predecessor's populated snapshot, and it is why 6 treaties are ACTIVE here against that snapshot's 7. Re-running .venv/bin/python -m agent.seed against this address resumes it: the script is state-driven and submits nothing twice.",
       "get_protocol_overview": {
         "balance": "6500000000000000000000",
         "total_collateral": "750000000000000000000",
@@ -70,7 +69,7 @@
         "solvent": true
       },
       "get_enclave_count": "6",
-      "roster_read_directly": [
+      "roster": [
         {
           "index": 0,
           "address": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
@@ -88,13 +87,120 @@
           "status": "SANCTIONED",
           "reputation": "0",
           "collateral": "0"
+        },
+        {
+          "index": 2,
+          "address": "0xeC250E9D8F6E8c6788Cc3622E7324F52fc66a4e7",
+          "name": "Vantage",
+          "archetype": "Liquidity Nexus",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 3,
+          "address": "0x958640fbcb8991298757CC14562681EaC1E5c48F",
+          "name": "Aegis",
+          "archetype": "Defense Vanguard",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 4,
+          "address": "0x144a4588104B8EE058d1F7C49623A60E907c18d6",
+          "name": "Quorum",
+          "archetype": "Oracle Collective",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        },
+        {
+          "index": 5,
+          "address": "0xE121091ABd59D2f686147F0C6135ab9936863730",
+          "name": "Solstice",
+          "archetype": "Autonomous Arbiter",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "150000000000000000000"
+        }
+      ],
+      "treaties": [
+        {
+          "id": 1,
+          "kind": "DATA_SHARING",
+          "status": "PROPOSED",
+          "bond_a": "700000000000000000000",
+          "bond_b": "0"
+        },
+        {
+          "id": 2,
+          "kind": "DATA_SHARING",
+          "status": "SETTLED",
+          "bond_a": "0",
+          "bond_b": "0"
+        },
+        {
+          "id": 3,
+          "kind": "TRADE_CORRIDOR",
+          "status": "ACTIVE",
+          "bond_a": "300000000000000000000",
+          "bond_b": "300000000000000000000"
+        },
+        {
+          "id": 4,
+          "kind": "NON_AGGRESSION",
+          "status": "ACTIVE",
+          "bond_a": "300000000000000000000",
+          "bond_b": "300000000000000000000"
+        },
+        {
+          "id": 5,
+          "kind": "DATA_SHARING",
+          "status": "ACTIVE",
+          "bond_a": "300000000000000000000",
+          "bond_b": "300000000000000000000"
+        },
+        {
+          "id": 6,
+          "kind": "NON_AGGRESSION",
+          "status": "ACTIVE",
+          "bond_a": "300000000000000000000",
+          "bond_b": "300000000000000000000"
+        },
+        {
+          "id": 7,
+          "kind": "DATA_SHARING",
+          "status": "ACTIVE",
+          "bond_a": "200000000000000000000",
+          "bond_b": "200000000000000000000"
+        },
+        {
+          "id": 8,
+          "kind": "NON_AGGRESSION",
+          "status": "ACTIVE",
+          "bond_a": "200000000000000000000",
+          "bond_b": "200000000000000000000"
+        },
+        {
+          "id": 9,
+          "kind": "DATA_SHARING",
+          "status": "PROPOSED",
+          "bond_a": "200000000000000000000",
+          "bond_b": "0"
         }
       ],
       "treaty_counts": {
         "total": 9,
-        "detail": "not enumerated; see reading_caveat"
+        "active": 6,
+        "proposed": 2,
+        "settled": 1
       },
-      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (750 + 4100 + 150 + 1500 == 6500 GEN)"
+      "claimable": {
+        "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e": "1500000000000000000000",
+        "0xD0C66f72add962e469d002De98c36F300Ad2eE7f": "0"
+      },
+      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (750 + 4100 + 150 + 1500 == 6500 GEN); the treaty bonds independently sum to the same 4100 GEN of locked_escrow"
     },
     "deployed_code_sha256": {
       "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. The explorer API publishes the deploy transaction's own contract_code, which settles the question directly: sha256(base64.b64decode(deploy_tx.data.contract_code)) below is the hash of the code RUNNING at contract_address.",
