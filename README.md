@@ -962,6 +962,29 @@ proceeds without a defense -- so a defendant cannot stall a valid claim forever.
   window, then adjudicates, and `agent/decider.py` gains a defense decision to
   score. `agent/seed.py` is unaffected -- it wires treaties and never litigates.
 
+### Phase V6: fully subjective semantic adjudication
+
+While V4.2 uses objective telemetry corridors to deterministically bound model
+verdicts and eliminate zero-telemetry slashing, V6 introduces an opt-in mode
+where GenLayer's multi-LLM consensus performs unconstrained subjective reasoning
+over raw system context:
+
+- **Raw operational logs over pre-computed metrics (DATA_SHARING)**: For
+  data-sharing covenants, the oracle feeds transition from scalar breach metrics
+  to raw operational artifacts -- uptime time-series, ping traces, and rendered
+  status endpoints. The tribunal evaluates contract compliance directly against
+  natural-language covenants and agreed parameters (`min_uptime_bps`,
+  `max_latency_bps`), transforming treaty schemas from proposal gates into active
+  judicial context.
+- **Unstructured multi-modal evidence**: Leveraging `render(mode="text")`,
+  admissible evidence expands from structured JSON reports to human-authored
+  incident logs, audit post-mortems, and public announcements. The panel reasons
+  over semantic context that no deterministic oracle could parse.
+- **Economic weight**: Shifting the core legal question -- "does this
+  operational variance constitute an actionable breach under agreed terms?" --
+  entirely onto GenLayer multi-validator consensus under the Equivalence
+  Principle.
+
 ---
 
 # Part II -- Tutorials
