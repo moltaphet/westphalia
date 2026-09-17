@@ -12,6 +12,14 @@
  * assuming one, because assuming the hosted shape silently yields `undefined`
  * on the simulator.
  *
+ * The fee preset is built, not implied. Studio Next has no on-chain FeeManager,
+ * and the SDK resolves an absent `fees` argument to a deposit of zero rather
+ * than deriving one -- which the chain rejects with `FeeValueMustBeNonZero(1)`
+ * before the deploy runs. `estimateTransactionFees` reads the live fee policy
+ * and derives the deposit from it without simulating anything, which matters
+ * here: a simulated deploy would execute `__init__` against a simulation clock
+ * that is not the block clock.
+ *
  * Types are declared structurally rather than imported from genlayer-js: the
  * CLI resolves the SDK from its own installation, and this file has no
  * runtime dependency of its own to resolve.
@@ -37,10 +45,26 @@ interface DeployReceipt {
   txDataDecoded?: { contractAddress?: string };
 }
 
+/**
+ * The SDK's policy-derived fee preset. `feeValue` is the deposit the chain
+ * charges up front; `distribution` is how it is allocated across the round.
+ * Carried opaquely -- this script never inspects or recomputes either.
+ */
+interface TransactionFees {
+  distribution: Record<string, unknown>;
+  messageAllocations?: unknown;
+  feeValue: bigint;
+}
+
 interface DeployClient {
   chain: { id: number };
   initializeConsensusSmartContract(): Promise<void>;
-  deployContract(input: { code: Uint8Array; args: unknown[] }): Promise<string>;
+  estimateTransactionFees(input: Record<string, never>): Promise<TransactionFees>;
+  deployContract(input: {
+    code: Uint8Array;
+    args: unknown[];
+    fees?: TransactionFees;
+  }): Promise<string>;
   waitForTransactionReceipt(input: {
     hash: string;
     waitUntil: "decided" | "finalized";
@@ -78,7 +102,12 @@ export default async function main(client: DeployClient): Promise<string> {
   // it the deploy has nowhere to be sent.
   await client.initializeConsensusSmartContract();
 
-  const hash = await client.deployContract({ code, args: [] });
+  // Studio Next has no fee manager, so the deposit must come from the chain's
+  // live fee policy. Passing no `fees` resolves the deposit to zero and the
+  // chain rejects the deploy with FeeValueMustBeNonZero(1).
+  const fees = await client.estimateTransactionFees({});
+
+  const hash = await client.deployContract({ code, args: [], fees });
   const receipt = await client.waitForTransactionReceipt({
     hash,
     waitUntil: "decided",

@@ -9,6 +9,7 @@ adversarial suites; run the whole set with:
 Pure-ASCII. Direct mode executes the leader function only.
 """
 
+import json
 from datetime import datetime, timezone
 
 from conftest import (
@@ -86,14 +87,22 @@ def test_tribunal_verdict_trusted_above_zero_telemetry(direct_vm, direct_deploy,
 
 
 # --- Semantic covenant adjudication: evidence + terms drive the verdict -----
-def test_semantic_evidence_lifts_zero_telemetry_to_elevated(direct_vm, direct_deploy, direct_alice, direct_bob):
-    """True semantic adjudication AND the V4 ceiling corridor together: the
-    tribunal reads a REAL evidence document on-chain and returns CRITICAL_BREACH,
-    but telemetry is a spotless 0 bps. Because bps < 2500, a full sanction is
-    forbidden -- with corroborating evidence the verdict is capped to
-    ELEVATED_RISK (a 25% slash), never CRITICAL. The evidence still lifts it above
-    the no-evidence NORMAL floor; it just cannot produce a full sanction on
-    negligible telemetry."""
+def test_semantic_evidence_cannot_lift_zero_telemetry(direct_vm, direct_deploy, direct_alice, direct_bob):
+    """True semantic adjudication AND the tightest V4.1 ceiling corridor together.
+
+    The evidence document really is fetched on-chain and really does reach the
+    tribunal -- the LLM mock below resolves ONLY for a prompt that carries the
+    incident report's own text, so if the read were skipped this test would fail
+    with MockNotFoundError rather than pass vacuously. The tribunal returns
+    CRITICAL_BREACH on the strength of that report, but the defendant's telemetry
+    is a spotless 0 bps. Below BPS_NEGLIGIBLE the verdict floors to NORMAL and the
+    defendant keeps its whole bond.
+
+    V4 drew this corridor one band higher: at 0 bps, a corroborating document
+    could still cap a CRITICAL to ELEVATED_RISK for a 25% slash. V4.1 removed that
+    escape -- a document the plaintiff chose and uploaded is not independent
+    corroboration of a metric that reads a clean zero -- so reading the evidence
+    is no longer by itself enough to move value."""
     c = direct_deploy(CONTRACT)
     tid = active_treaty(c, direct_vm, direct_alice, direct_bob)
     bob = khex(c, direct_vm, direct_bob)
@@ -111,10 +120,14 @@ def test_semantic_evidence_lifts_zero_telemetry_to_elevated(direct_vm, direct_de
         "corrupted price data throughout the window.\n"
     )
     mock_evidence(direct_vm, r".*audit-log\.example.*", incident)
-    mock_verdict(
-        direct_vm,
-        "CRITICAL_BREACH",
-        rationale="Evidence proves a sustained 9h SLA breach far below the agreed uptime floor.",
+    # Resolves only if the report's own prose is in the prompt: this is what makes
+    # the on-chain evidence read load-bearing rather than assumed.
+    direct_vm.mock_llm(
+        r"(?s).*served stale snapshots for 9h11m.*",
+        json.dumps(json.dumps({
+            "verdict": "CRITICAL_BREACH",
+            "rationale": "Evidence proves a sustained 9h SLA breach far below the agreed uptime floor.",
+        })),
     )
 
     direct_vm.sender = direct_alice
@@ -127,11 +140,11 @@ def test_semantic_evidence_lifts_zero_telemetry_to_elevated(direct_vm, direct_de
     )
     direct_vm.value = 0
 
-    # V4 ceiling: 0 bps + evidence caps CRITICAL to ELEVATED_RISK. The defendant
-    # is NOT fully sanctioned, but takes the 25% elevated slash.
-    assert verdict == "ELEVATED_RISK"
+    # V4.1 ceiling: 0 bps + evidence floors CRITICAL to NORMAL. The evidence was
+    # read and weighed, but it cannot manufacture a breach out of a clean zero.
+    assert verdict == "NORMAL"
     assert c.get_enclave(bob)["status"] == "ACTIVE"
-    assert int(c.get_treaty(tid)["bond_b"]) == BOND - BOND * 25 // 100
+    assert int(c.get_treaty(tid)["bond_b"]) == BOND
 
 
 def test_evidence_ignored_when_uri_not_web_fetchable(direct_vm, direct_deploy, direct_alice, direct_bob):
