@@ -58,17 +58,17 @@
       "sanitize_preview": "[x]"
     },
     "observed_at_current_head": {
-      "note": "Read from the chain after agent.demo and agent.seed were run against this address. The demo reached consensus on CRITICAL_BREACH and settled: Halcyon (plaintiff) was credited 1500 GEN and Meridian (defendant) was sanctioned, its 150 GEN collateral moved to reserves -- which is why reserves is no longer zero. agent.seed then founded the wider roster and wired treaties #3 through #9. One ratification did not land: the local faucet rate-limited (Rate limit exceeded: 500 requests per hour) on treaty #9 after the counterparty had matched the bond, so #9 stands PROPOSED and its 200 GEN second bond is not in locked_escrow. That single missing bond is the whole of the 200 GEN difference from the predecessor's populated snapshot, and it is why 6 treaties are ACTIVE here against that snapshot's 7. Re-running .venv/bin/python -m agent.seed against this address resumes it: the script is state-driven and submits nothing twice.",
+      "note": "Read from the chain after agent.demo and agent.seed were run against this address, plus three writes submitted directly from the governor wallet: founding one further enclave (albert, 100 GEN) and proposing treaties #10 and #11 (100 GEN each). The demo reached consensus on CRITICAL_BREACH and settled: Halcyon (plaintiff) was credited 1500 GEN and Meridian (defendant) was sanctioned, its 150 GEN collateral moved to reserves -- which is why reserves is no longer zero. agent.seed then founded the wider roster and wired treaties #3 through #9. One ratification did not land: the local faucet rate-limited (Rate limit exceeded: 500 requests per hour) before treaty #9's counterparty bond could be funded, so #9 stands PROPOSED and its 200 GEN second bond is not in locked_escrow. Re-running .venv/bin/python -m agent.seed against this address resumes it: the script is state-driven and submits nothing twice. The three governor writes are not part of the scripted run, so this head reading stands one enclave and two treaties above what the scripts alone produce (6 enclaves, 9 treaties, 4100 GEN of escrow).",
       "get_protocol_overview": {
-        "balance": "6500000000000000000000",
-        "total_collateral": "750000000000000000000",
-        "locked_escrow": "4100000000000000000000",
+        "balance": "6800000000000000000000",
+        "total_collateral": "850000000000000000000",
+        "locked_escrow": "4300000000000000000000",
         "reserves": "150000000000000000000",
         "total_claimable": "1500000000000000000000",
-        "next_treaty_id": "10",
+        "next_treaty_id": "12",
         "solvent": true
       },
-      "get_enclave_count": "6",
+      "get_enclave_count": "7",
       "roster": [
         {
           "index": 0,
@@ -123,6 +123,15 @@
           "status": "ACTIVE",
           "reputation": "50",
           "collateral": "150000000000000000000"
+        },
+        {
+          "index": 6,
+          "address": "0x1f9813eeB2de53134af5C824cA156CE82C4EB0fa",
+          "name": "albert",
+          "archetype": "Defense Vanguard",
+          "status": "ACTIVE",
+          "reputation": "50",
+          "collateral": "100000000000000000000"
         }
       ],
       "treaties": [
@@ -188,19 +197,33 @@
           "status": "PROPOSED",
           "bond_a": "200000000000000000000",
           "bond_b": "0"
+        },
+        {
+          "id": 10,
+          "kind": "NON_AGGRESSION",
+          "status": "PROPOSED",
+          "bond_a": "100000000000000000000",
+          "bond_b": "0"
+        },
+        {
+          "id": 11,
+          "kind": "NON_AGGRESSION",
+          "status": "PROPOSED",
+          "bond_a": "100000000000000000000",
+          "bond_b": "0"
         }
       ],
       "treaty_counts": {
-        "total": 9,
+        "total": 11,
         "active": 6,
-        "proposed": 2,
+        "proposed": 4,
         "settled": 1
       },
       "claimable": {
         "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e": "1500000000000000000000",
         "0xD0C66f72add962e469d002De98c36F300Ad2eE7f": "0"
       },
-      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (750 + 4100 + 150 + 1500 == 6500 GEN); the treaty bonds independently sum to the same 4100 GEN of locked_escrow"
+      "solvency_identity": "total_collateral + locked_escrow + reserves + total_claimable == balance (850 + 4300 + 150 + 1500 == 6800 GEN); the treaty bonds independently sum to the same 4300 GEN of locked_escrow"
     },
     "deployed_code_sha256": {
       "note": "GenVM is not an EVM chain, so eth_getCode returns 0x even for a live contract and cannot be used to compare deployed bytecode against source. The explorer API publishes the deploy transaction's own contract_code, which settles the question directly: sha256(base64.b64decode(deploy_tx.data.contract_code)) below is the hash of the code RUNNING at contract_address.",

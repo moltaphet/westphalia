@@ -1037,24 +1037,28 @@ The recorded address was **deployed empty and then populated** by running
 board reads it live and the command bar badges `ON-CHAIN`. Every figure is read
 live from `get_protocol_overview` and reconciles against the explorer.
 
-Those two scripts take it to **six islands** and nine treaties, with **TOTAL
-VALUE LOCKED** reading **4100 GEN (chain)** straight from `locked_escrow`. The
-same pair reached exactly that state from nothing on the previous deployment too,
-because the same source driven by the same state-driven scripts converges on the
-same outcome; that predecessor,
-`0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`, still holds its own copy on chain.
-The recording in [`deployments/studio-dev.json`](deployments/studio-dev.json) is
-read from this address.
+Those two scripts take it to **six islands** and nine treaties, 4100 GEN of it
+escrowed, with **TOTAL VALUE LOCKED** read straight from `locked_escrow`. Three
+further writes on top of that -- one enclave and two treaties -- came from the
+governor wallet directly rather than from a script, which is where the seventh
+island and treaties 10 and 11 come from and why the recording below reads 4300;
+the reading note above spells out what that changes. The predecessor deployment,
+`0xa92Ea76aeB17BBE7bc88De74E53D5cCB4d30eBED`, still holds its own copy on chain,
+and it too settles at 4300 GEN of escrow -- but over six enclaves and nine
+treaties, so the figures agree by arithmetic rather than by the two runs
+converging. The recording in
+[`deployments/studio-dev.json`](deployments/studio-dev.json) is read from the
+current address.
 
 ```bash
 .venv/bin/python -m agent.demo       # Halcyon and Meridian, through to a verdict
 .venv/bin/python -m agent.seed       # Vantage, Aegis, Quorum, Solstice + treaties
 ```
 
-A completed run leaves six islands and nine treaties, with 4100 GEN of escrow on
-this deployment (one ratification short of the predecessor's 4300 -- see the
-reading note above). The full observed state, read from the chain after the run,
-is in [`deployments/studio-dev.json`](deployments/studio-dev.json).
+A completed scripted run leaves six islands and nine treaties, with 4100 GEN of
+escrow; the 4300 above counts the two treaties the governor wallet proposed on
+top. The full observed state, read from the chain after the run, is in
+[`deployments/studio-dev.json`](deployments/studio-dev.json).
 
 Reads need no wallet. **Writes do**: clicking a propose/ratify/dispute action
 without a wallet produces a receipt labelled *simulated* and the command bar
@@ -1484,37 +1488,47 @@ authoritative record; it is updated by reading the chain, never by hand.
 ### Demonstration state (reproducible)
 
 Every revision in this tree deploys empty (`get_enclave_count == 0`). Running
-`agent.demo` then `agent.seed` against a fresh address reproduces the state below
--- the same source driven by the same state-driven scripts converges on the same
-outcome. The counters were read live from the deployed address above, which ran
-those two scripts and then one adjudication to completion, which is why
+`agent.demo` then `agent.seed` against a fresh address reproduces the bulk of the
+state below -- the same source driven by the same state-driven scripts converges
+on the same outcome. The counters were read live from the deployed address above,
+which ran those two scripts and then one adjudication to completion, which is why
 `reserves` below is no longer zero: the demo's `CRITICAL_BREACH` verdict
 sanctions the defendant, moving its 150 GEN collateral into reserves and zeroing
-its bond. The snapshot is preserved in
+its bond.
+
+Three further writes came from the governor wallet rather than from a script: it
+founded one additional enclave (`albert`, 100 GEN) and proposed two additional
+treaties (`#10` and `#11`, 100 GEN each), for a recorded run. They are counted
+here rather than excluded because this section's rule is that it is updated by
+reading the chain and never by hand, so what the chain holds is what it says.
+The snapshot is preserved in
 [`deployments/studio-dev.json`](deployments/studio-dev.json).
 
 | Counter | Value |
 |---|---|
-| `balance` | 6500 GEN |
-| `total_collateral` | 750 GEN |
-| `locked_escrow` | 4100 GEN |
+| `balance` | 6800 GEN |
+| `total_collateral` | 850 GEN |
+| `locked_escrow` | 4300 GEN |
 | `reserves` | 150 GEN |
 | `total_claimable` | 1500 GEN |
-| `next_treaty_id` | 10 |
-| `get_enclave_count` | 6 |
+| `next_treaty_id` | 12 |
+| `get_enclave_count` | 7 |
 | `solvent` | `true` |
 
 The solvency identity holds on that snapshot:
-`750 + 4100 + 150 + 1500 == 6500`, exactly the contract's own balance.
+`850 + 4300 + 150 + 1500 == 6800`, exactly the contract's own balance.
 
 > **Reading note.** These counters were read live from the deployed address, as
-> were the roster below and every treaty record. One ratification is missing:
-> `agent.seed` proposed treaty #9 and the counterparty matched the bond, but the
-> local faucet rate-limited (`Rate limit exceeded: 500 requests per hour`) before
-> the deposit landed, so #9 stands `PROPOSED` rather than `ACTIVE` and its second
-> bond is not in `locked_escrow`. That is the whole of the 200 GEN difference
-> from the predecessor's 4300. Re-running `agent.seed` against the same address
-> resumes it -- the script is state-driven and submits nothing twice.
+> were the roster below and every treaty record. Four treaties stand `PROPOSED`,
+> each carrying only its proposer's bond: `#1` is Halcyon's opening offer, never
+> ratified; `#9` proposed successfully but its counterparty's ratification never
+> landed, because the local faucet rate-limited (`Rate limit exceeded: 500
+> requests per hour`) before the bond could be funded; `#10` and `#11` await
+> their counterparty. `#1` is the case `cancel_proposal` exists for. The
+> proposer-side bonds of all four sit inside `locked_escrow`; no second bond
+> does, because a `PROPOSED` treaty has only ever had one side posted.
+> Re-running `agent.seed` against the same address resumes it -- the script is
+> state-driven and submits nothing twice.
 
 The roster, in the order the contract enumerates it:
 
@@ -1526,20 +1540,24 @@ The roster, in the order the contract enumerates it:
 | 3 | Aegis | Defense Vanguard | ACTIVE | 50 | 150 GEN |
 | 4 | Quorum | Oracle Collective | ACTIVE | 50 | 150 GEN |
 | 5 | Solstice | Autonomous Arbiter | ACTIVE | 50 | 150 GEN |
+| 6 | albert | Defense Vanguard | ACTIVE | 50 | 100 GEN |
 
 Meridian's collateral reads `0` because sanctioning moved its entire 150 GEN into
 `reserves` -- which is the 150 GEN in the counters above, and why
-`total_collateral` is 750 (five solvent enclaves) rather than 900.
+`total_collateral` is 850 (six solvent enclaves) rather than 1000. `albert` sits
+at slot 6 with the 100 GEN minimum, the enclave the governor wallet founded
+directly rather than through a script; the roster index appends it like any other
+and the board draws it without special-casing.
 
 Treaty #2 is the one that was adjudicated: Halcyon filed against Meridian, the
 validators read the treaty's own oracles inside consensus, agreed on
 `CRITICAL_BREACH`, and settlement released both bonds -- which is why Halcyon
 holds 1500 GEN claimable and Meridian's reputation reads 0 and `SANCTIONED`.
 Treaty #1 is Halcyon's rejected opening offer, still standing with its 700 GEN
-bond; it is the case `cancel_proposal` exists for, and it is 700 of the 4100 GEN
+bond; it is the case `cancel_proposal` exists for, and it is 700 of the 4300 GEN
 of escrow.
 
-Nine treaties are on the book -- six ACTIVE, two PROPOSED, one SETTLED:
+Eleven treaties are on the book -- six ACTIVE, four PROPOSED, one SETTLED:
 
 | # | Kind | Status | `bond_a` | `bond_b` |
 |---|---|---|---|---|
@@ -1552,26 +1570,28 @@ Nine treaties are on the book -- six ACTIVE, two PROPOSED, one SETTLED:
 | 7 | `DATA_SHARING` | ACTIVE | 200 GEN | 200 GEN |
 | 8 | `NON_AGGRESSION` | ACTIVE | 200 GEN | 200 GEN |
 | 9 | `DATA_SHARING` | PROPOSED | 200 GEN | -- |
+| 10 | `NON_AGGRESSION` | PROPOSED | 100 GEN | -- |
+| 11 | `NON_AGGRESSION` | PROPOSED | 100 GEN | -- |
 
-The bond columns sum to 4100 GEN -- `locked_escrow` exactly, which is the
+The bond columns sum to 4300 GEN -- `locked_escrow` exactly, which is the
 solvency identity above read a second way.
 
-Every one of the six is party to at least one treaty, so this state does not by
+Every one of the seven is party to at least one treaty, so this state does not by
 itself exercise the index's headline case -- an enclave that has never been party
 to one. What it does show is the index answering and enumerating the roster in a
 fixed order, which is what the board draws its islands from; treaty parties are
 merged in afterwards only as a fallback.
 
 That address was deployed **empty** and populated by running those two scripts
-against it. The deploy-time reading is in
-[`deployments/studio-dev.json`](deployments/studio-dev.json) under
+against it, plus the three direct governor writes noted above. The deploy-time
+reading is in [`deployments/studio-dev.json`](deployments/studio-dev.json) under
 `verification.observed_at_deploy`, and the head reading above under
-`observed_at_current_head`. The figures match what the superseded V3.1
-deployment reached from the same starting state -- which is the expected result
-rather than a coincidence: the same source driven by the same state-driven
-scripts converges on the same protocol outcome. That predecessor is carried
-under `predecessors`, and it was superseded because it predates the roster
-index, not because anything in it failed.
+`observed_at_current_head`. The head reading carries one enclave and two treaties
+more than the superseded V3.1 deployment reached from the same starting state,
+because those three writes are not part of the scripted run; the escrow totals
+coincide at 4300 GEN over different books. That predecessor is carried under
+`predecessors`, and it was superseded because it predates the roster index, not
+because anything in it failed.
 
 The **V4.2** revision is deployed at
 `0xdef36428f9789a7Ee4daD24a1A8B6997D475cA1E` and was populated by running the
