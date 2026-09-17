@@ -985,6 +985,22 @@ over raw system context:
   entirely onto GenLayer multi-validator consensus under the Equivalence
   Principle.
 
+> **Open item carried into the next revision.** V4.2's clamp is deliberately
+> asymmetric, and the cost of that asymmetry is asymmetric too. Code acts only to
+> prevent harm -- a ceiling on slashing -- and never to compel it, so a tribunal
+> that returns `NORMAL` against corroborating telemetry stands. An honest
+> plaintiff whose defendant metric reads at or above `BPS_CRITICAL` can therefore
+> be acquitted and still pay the non-refundable validation fee out of its dispute
+> bond. A floor forcing `ELEVATED_RISK` at that band would close the gap, but it
+> would also make the metric decisive and the tribunal decorative -- the "AI
+> theater" this protocol exists to avoid, and the direction V6 moves away from
+> rather than toward. The narrower fix is to leave the verdict alone and stop
+> charging for it: waive the validation fee on a `NORMAL` verdict whose defendant
+> metric sits at or above `BPS_CRITICAL`, so code still compels no slash and only
+> declines to bill a plaintiff the objective record corroborated. This is not
+> implemented in V4.2, and it is independent of V5 and V6 -- it holds in the
+> objective mode whether or not either phase lands.
+
 ---
 
 # Part II -- Tutorials
