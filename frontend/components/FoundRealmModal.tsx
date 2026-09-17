@@ -16,6 +16,11 @@ const ARCHETYPES: Archetype[] = [
 const inputCls =
   "w-full rounded border border-slate-700 bg-slate-800/70 px-3 py-2 text-[12px] text-slate-100 outline-none focus:border-cyan-500/60";
 
+// Mirrors `MIN_ENCLAVE_COLLATERAL = 100 * ATTO` in contracts/westphalia.py.
+// `found_sovereignty` is payable and reverts ERR_INSUFFICIENT_BOND below it, so
+// the form refuses the value rather than spending a transaction to be told.
+const MIN_ENCLAVE_COLLATERAL_GEN = 100;
+
 export default function FoundRealmModal({
   onClose,
   onSubmit,
@@ -25,7 +30,11 @@ export default function FoundRealmModal({
 }) {
   const [name, setName] = useState("Aegis Sentinel Omega");
   const [archetype, setArchetype] = useState<Archetype>("Defense Vanguard");
-  const [collateral, setCollateral] = useState(60000);
+  // The contract's floor is MIN_ENCLAVE_COLLATERAL (100 GEN) and its payable
+  // check rejects anything below it, so the default sits on the floor rather
+  // than at the 60,000 it used to carry -- a figure no testnet faucet balance
+  // covers, which made the form unusable without editing it down first.
+  const [collateral, setCollateral] = useState(MIN_ENCLAVE_COLLATERAL_GEN);
   const [governance, setGovernance] = useState(
     "Auto-accept non-aggression and trade pacts with counterparties above 80 percent compliance; route any breach to GenLayer quorum."
   );
@@ -80,11 +89,14 @@ export default function FoundRealmModal({
             </span>
             <input
               type="number"
-              min={0}
+              min={MIN_ENCLAVE_COLLATERAL_GEN}
               className={inputCls}
               value={collateral}
               onChange={(e) => setCollateral(Number(e.target.value))}
             />
+            <span className="mt-1 block text-[10px] text-slate-500">
+              Minimum {MIN_ENCLAVE_COLLATERAL_GEN} GEN. Sent as the transaction value.
+            </span>
           </label>
 
           <label className="mb-3 block">
@@ -106,7 +118,7 @@ export default function FoundRealmModal({
             disabled={
               !name.trim() ||
               !Number.isFinite(collateral) ||
-              collateral <= 0
+              collateral < MIN_ENCLAVE_COLLATERAL_GEN
             }
             className="mt-1 w-full rounded border border-emerald-500/50 bg-emerald-500/15 py-2.5 text-[12px] font-bold tracking-widest text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40"
           >
