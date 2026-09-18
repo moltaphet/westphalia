@@ -6,6 +6,7 @@ import type { AppView } from "@/lib/types";
 import { useWestphaliaStore } from "@/lib/store";
 import HudOverlay from "./HudOverlay";
 import IntroOverlay from "./IntroOverlay";
+import AboutModal from "./AboutModal";
 import TopBar from "./TopBar";
 import GlobalFeedback from "./GlobalFeedback";
 import FoundRealmModal from "./FoundRealmModal";
@@ -33,6 +34,7 @@ export default function Experience() {
   const s = useWestphaliaStore();
   const [view, setView] = useState<AppView>("world");
   const [foundOpen, setFoundOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   // True while any HUD modal / audit inspector is open (reported by HudOverlay).
   const [hudOverlayOpen, setHudOverlayOpen] = useState(false);
   // Collapsible side panels + cinematic mode (collapse both).
@@ -48,7 +50,7 @@ export default function Experience() {
   // Suppress Drei Html scene labels whenever a modal/dialog is open so they
   // never bleed through the blurred backdrop. (Non-world views unmount the
   // board entirely, so labels are already gone there.)
-  const showLabels = !foundOpen && !hudOverlayOpen && !s.txRequest && !s.latestVerdict;
+  const showLabels = !foundOpen && !aboutOpen && !hudOverlayOpen && !s.txRequest && !s.latestVerdict;
 
   return (
     <>
@@ -135,6 +137,7 @@ export default function Experience() {
         onFound={() => setFoundOpen(true)}
         cinematic={cinematic}
         onToggleCinematic={toggleCinematic}
+        onAbout={() => setAboutOpen(true)}
       />
       <GlobalFeedback pipeline={s.pipeline} lastReceipt={s.lastReceipt} />
       <IntroOverlay />
@@ -157,6 +160,13 @@ export default function Experience() {
             setView("world");
           }}
         />
+      )}
+
+      {/* Rendered here rather than inside TopBar: the header is `fixed`, so an
+          `absolute inset-0` panel placed within it would size against the
+          header box instead of the viewport. */}
+      {aboutOpen && (
+        <AboutModal network={s.network} onClose={() => setAboutOpen(false)} />
       )}
 
       {/* Post-dispute adjudication card: shows the tribunal's verdict tier and

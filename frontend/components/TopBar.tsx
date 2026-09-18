@@ -9,6 +9,7 @@ import {
   Film,
   Gavel,
   Globe2,
+  Info,
   Network,
   Plus,
   Radio,
@@ -86,6 +87,7 @@ export default function TopBar({
   onFound,
   cinematic,
   onToggleCinematic,
+  onAbout,
 }: {
   state: ProtocolState;
   network: NetworkConfig;
@@ -102,6 +104,7 @@ export default function TopBar({
   onFound: () => void;
   cinematic: boolean;
   onToggleCinematic: () => void;
+  onAbout: () => void;
 }) {
   const [netOpen, setNetOpen] = useState(false);
   // Live on-chain escrow (atto -> whole GEN) replaces the simulated TVL
@@ -249,6 +252,14 @@ export default function TopBar({
             }`}
           >
             <Film size={14} /> <span className="hidden md:inline">CINEMATIC</span>
+          </button>
+
+          <button
+            onClick={onAbout}
+            title="What this protocol is, how a dispute settles, and where the source lives"
+            className="flex items-center gap-1.5 rounded border border-zinc-700 bg-zinc-900/70 px-3 py-2 text-[11px] font-bold tracking-widest text-slate-300 transition hover:border-cyan-400/60 hover:text-cyan-100"
+          >
+            <Info size={14} /> <span className="hidden sm:inline">ABOUT</span>
           </button>
 
           <div className="relative">
