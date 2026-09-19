@@ -739,6 +739,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   "w-full rounded border border-slate-700 bg-slate-800/70 px-3 py-2 text-[12px] text-slate-100 outline-none focus:border-cyan-500/60";
 
+// The deployed contract accepts any treaty bond > 0 (only enclave collateral and
+// dispute bonds carry hard floors), so the treaty bond defaults to a small
+// testnet-friendly amount a few-GEN faucet balance can cover -- not the 10,000
+// GEN the form used to seed, which no faucet drip could fund. The counterparty
+// ratifies by matching this exact amount, so keeping it small keeps the whole
+// propose -> ratify handshake affordable.
+const TESTNET_BOND_PRESET_GEN = 0.1;
+
 function ProposeModal({
   state,
   selfId,
@@ -754,7 +762,7 @@ function ProposeModal({
   const [partner, setPartner] = useState(partners[0]?.id ?? "");
   const [kind, setKind] = useState<TreatyKind>("non-aggression");
   const [terms, setTerms] = useState("Mutual non-aggression with 24h dispute window.");
-  const [bond, setBond] = useState(10000);
+  const [bond, setBond] = useState(TESTNET_BOND_PRESET_GEN);
 
   return (
     <ModalShell title="PROPOSE TREATY" icon={<Shield size={15} className="text-emerald-400" />} onClose={onClose}>
@@ -787,8 +795,21 @@ function ProposeModal({
           className={inputCls}
           value={bond}
           min={0}
+          step={0.01}
           onChange={(e) => setBond(Number(e.target.value))}
         />
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <span className="text-[9px] leading-relaxed text-slate-500">
+            Any amount &gt; 0; the partner matches it to ratify.
+          </span>
+          <button
+            type="button"
+            onClick={() => setBond(TESTNET_BOND_PRESET_GEN)}
+            className="shrink-0 rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[9px] font-bold tracking-widest text-cyan-200 hover:bg-cyan-500/20"
+          >
+            USE TESTNET PRESET ({TESTNET_BOND_PRESET_GEN} GEN)
+          </button>
+        </div>
       </Field>
       <button
         onClick={() => onSubmit(partner, kind, terms, bond)}

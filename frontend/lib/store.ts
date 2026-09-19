@@ -984,7 +984,24 @@ export function useWestphaliaStore() {
         // contract would accept: the SSRF gate admits http(s) only, and the
         // digest has to be a real SHA-256 of the served bytes. Both now arrive
         // from the form.
-        const bond = t ? Math.max(500, Math.ceil(t.bondGen * 0.05)) : 500;
+        //
+        // The dispute bond is the reputation-scaled floor the DEPLOYED contract
+        // enforces (`required_dispute_bond`), read live so the UI posts the
+        // lowest VALID amount for the plaintiff's actual reputation (250 GEN at
+        // reputation 100, 500 GEN at the seed) rather than a flat over-estimate.
+        // The seed-reputation floor (500 GEN) is the fallback when the view is
+        // unavailable (reviewer mode) or the plaintiff has no on-chain address.
+        const parties: string[] = t?.parties ?? [];
+        const plaintiffId =
+          selectedId && parties.includes(selectedId) ? selectedId : parties[0] ?? null;
+        const plaintiffHex =
+          enclaves.find((e) => e.id === plaintiffId)?.address ?? null;
+        let bond = 500;
+        if (plaintiffHex) {
+          const required =
+            await contractRef.current.requiredDisputeBondGen(plaintiffHex);
+          if (required != null && required > 0) bond = required;
+        }
         const receipt = await contractRef.current.triggerDispute(
           BigInt(t?.chainId ?? 0),
           allegation,
@@ -995,10 +1012,9 @@ export function useWestphaliaStore() {
         setLastReceipt(receipt);
 
         // Resolve plaintiff / defendant from the treaty parties. The acting
-        // enclave (selected) is the plaintiff; the counterparty is the defendant.
-        const parties: string[] = t?.parties ?? [];
-        const plaintiff =
-          selectedId && parties.includes(selectedId) ? selectedId : parties[0] ?? "protocol";
+        // enclave (selected) is the plaintiff (resolved above for the bond
+        // lookup); the counterparty is the defendant.
+        const plaintiff = plaintiffId ?? "protocol";
         const defendant = parties.find((p) => p !== plaintiff) ?? parties[1] ?? "protocol";
         const nameOf = (id: string) =>
           enclaves.find((e) => e.id === id)?.name ?? id;

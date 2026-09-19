@@ -222,9 +222,19 @@ export const DIPLOMATIC_ABI: AbiEntry[] = [
   },
 ];
 
-// Atto-scale helper: whole GEN -> on-chain uint256 units.
+// Atto-scale helper: GEN -> on-chain uint256 units. GEN may be fractional
+// (testnet bonds like 0.1), so the value is decomposed as a decimal string
+// rather than multiplied as a float: `gen * 1e18` overflows Number precision
+// for whole-GEN amounts, and `Math.round(gen)` used to floor sub-1-GEN inputs
+// to 0 (a 0.1 GEN bond would have been sent as a 0-value call). Whole-GEN
+// amounts still map exactly (empty fractional part).
 export const ATTO = 10n ** 18n;
-export const toAtto = (gen: number): bigint => BigInt(Math.round(gen)) * ATTO;
+export const toAtto = (gen: number): bigint => {
+  if (!Number.isFinite(gen) || gen <= 0) return 0n;
+  const [whole, frac = ""] = gen.toString().split(".");
+  const fracAtto = (frac + "0".repeat(18)).slice(0, 18);
+  return BigInt(whole) * ATTO + BigInt(fracAtto);
+};
 
 // Atto-scale string/bigint -> whole GEN (float), for chain-overview display.
 export function attoToGen(atto: string | bigint): number {
@@ -475,6 +485,22 @@ export class DiplomaticContract {
       value: toAtto(bondGen),
       args: [treatyId, allegationText, evidenceUri, evidenceHash],
     });
+  }
+
+  // Lowest VALID dispute bond for `plaintiffHex`, read from the deployed
+  // contract's reputation-scaled `required_dispute_bond` view (in whole GEN).
+  // The scaled bond is always a whole-GEN multiple (5 * (150 - min(rep, 100))),
+  // so the atto -> GEN division is exact. Returns null when the view is
+  // unavailable (reviewer mode / no SDK); the caller falls back to the
+  // seed-reputation floor.
+  async requiredDisputeBondGen(plaintiffHex: string): Promise<number | null> {
+    const raw = await this.read<string>("required_dispute_bond", [plaintiffHex]);
+    if (raw == null) return null;
+    try {
+      return Number(BigInt(raw) / ATTO);
+    } catch {
+      return null;
+    }
   }
 
   async claimPayout(): Promise<TxReceipt> {
