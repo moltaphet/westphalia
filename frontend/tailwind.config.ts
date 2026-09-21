@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import containerQueries from "@tailwindcss/container-queries";
 
 const config: Config = {
   content: [
@@ -49,7 +50,14 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Tailwind v3 has no container queries in core -- `@container` and the
+    // `@md:`/`@lg:` variants compile to nothing without this plugin, silently
+    // leaving a `grid` with no column count. The bilateral matrix needs them:
+    // it is mounted both in a 672px modal and in a 344px inspector rail, and
+    // viewport breakpoints cannot tell those two apart.
+    containerQueries,
+  ],
 };
 
 export default config;

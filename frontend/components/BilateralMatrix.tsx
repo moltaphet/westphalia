@@ -76,9 +76,14 @@ function FeedRow({
         : "text-slate-500";
   return (
     <div className="rounded border border-slate-700/60 bg-slate-950/40 px-2 py-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[9px] tracking-widest text-slate-500">{label}</span>
-        <span className={`text-[10px] font-bold tabular-nums ${tone}`}>{value}</span>
+      <div className="flex items-baseline justify-between gap-2">
+        {/* The label may wrap; the reading may not. "8,000 bps" carries a space,
+            so without this it breaks across lines into "8,000" and a bare "bps"
+            -- which reads as a different number than the one on chain. */}
+        <span className="min-w-0 text-[9px] tracking-widest text-slate-500">{label}</span>
+        <span className={`whitespace-nowrap text-[10px] font-bold tabular-nums ${tone}`}>
+          {value}
+        </span>
       </div>
       <div className="mt-0.5 truncate text-[9px] text-slate-600" title={url}>
         {url}
@@ -110,8 +115,13 @@ function Safeguard({
     slate: "border-slate-600/60 bg-slate-800/40",
   };
   return (
-    <div className={`rounded border px-2.5 py-2 ${border[tone]}`}>
-      <div className={`text-[9px] font-bold tracking-widest ${text[tone]}`}>{title}</div>
+    <div className={`flex flex-col rounded border px-2.5 py-2 ${border[tone]}`}>
+      {/* These titles are long and tracked wide, so at narrow column counts they
+          run to two or three lines. `text-balance` splits them evenly instead of
+          leaving one orphaned word on the last line. */}
+      <div className={`text-balance text-[9px] font-bold tracking-widest ${text[tone]}`}>
+        {title}
+      </div>
       <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{body}</p>
     </div>
   );
@@ -208,7 +218,7 @@ export default function BilateralMatrix({
   const guard = result ? agreementSafeguard(result) : null;
 
   return (
-    <section className="mb-3 rounded border border-slate-700/60 bg-slate-900/60 p-3">
+    <section className="@container mb-3 rounded border border-slate-700/60 bg-slate-900/60 p-3">
       <div className="mb-2 flex items-center gap-2">
         <Scale size={13} className="text-cyan-400" />
         <span className="text-[10px] font-bold tracking-[0.2em] text-slate-200">
@@ -221,7 +231,12 @@ export default function BilateralMatrix({
         accuses, from feeds neither side can change at dispute time.
       </p>
 
-      <div className="grid gap-2 md:grid-cols-2">
+      {/* Column counts key off the CARD's width, not the viewport's. The board
+          mounts this panel twice -- in a 672px modal and in a 344px inspector
+          rail -- and viewport breakpoints cannot tell those apart: on any
+          desktop the rail got the modal's column count, squeezing three
+          safeguards into 133px each. */}
+      <div className="grid gap-2 @md:grid-cols-2">
         {/* LEFT -- the plaintiff's side: assertion and commitment. */}
         <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5">
           <div className="text-[9px] font-bold tracking-widest text-amber-300">
@@ -315,12 +330,12 @@ export default function BilateralMatrix({
                   transient={Boolean(result?.secondaryTransient)}
                 />
                 <div className="rounded border border-slate-700/60 bg-slate-950/40 px-2 py-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] tracking-widest text-slate-500">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 text-[9px] tracking-widest text-slate-500">
                       AGREED METRIC ({role})
                     </span>
                     <span
-                      className={`text-[11px] font-bold tabular-nums ${
+                      className={`whitespace-nowrap text-[11px] font-bold tabular-nums ${
                         band ? TONE_TEXT[band.tone] : "text-slate-500"
                       }`}
                     >
@@ -337,8 +352,12 @@ export default function BilateralMatrix({
                   </div>
                   {result?.divergenceBps !== null && result?.divergenceBps !== undefined && (
                     <div className="mt-0.5 text-[9px] tabular-nums text-slate-500">
-                      feed divergence {formatBps(result.divergenceBps)} (budget{" "}
-                      {formatBps(DIVERGENCE_BPS)})
+                      <span className="whitespace-nowrap">
+                        feed divergence {formatBps(result.divergenceBps)}
+                      </span>{" "}
+                      <span className="whitespace-nowrap">
+                        (budget {formatBps(DIVERGENCE_BPS)})
+                      </span>
                     </div>
                   )}
                 </div>
@@ -351,7 +370,7 @@ export default function BilateralMatrix({
         </div>
       </div>
 
-      <div className="mt-2 grid gap-2 md:grid-cols-3">
+      <div className="mt-2 grid gap-2 @lg:grid-cols-3">
         <Safeguard
           tone={guard?.tone === "amber" ? "amber" : guard?.tone === "emerald" ? "emerald" : "slate"}
           title="DUAL-FEED CROSS-EXAMINATION"

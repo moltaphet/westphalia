@@ -754,11 +754,16 @@ function ModalShell({
   title,
   icon,
   onClose,
+  maxWidth = "max-w-md",
   children,
 }: {
   title: string;
   icon: React.ReactNode;
   onClose: () => void;
+  // The card's max-width class. The default suits a short form; a modal that
+  // renders dense side-by-side data passes a wider one. Tailwind only emits the
+  // classes it finds in source, so these stay literal at the call site.
+  maxWidth?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -769,7 +774,9 @@ function ModalShell({
           dispute modal did once the bilateral matrix moved in above its submit
           button. The header stays `shrink-0` so the title and the close control
           remain on screen while the body scrolls beneath them. */}
-      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-hud">
+      <div
+        className={`flex max-h-[90vh] w-full ${maxWidth} flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-hud`}
+      >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-700/60 px-4 py-3">
           <div className="flex items-center gap-2">
             {icon}
@@ -1004,7 +1011,14 @@ function DisputeModal({
   }, [derive]);
 
   return (
-    <ModalShell title="INITIATE BILATERAL ADJUDICATION" icon={<Swords size={15} className="text-amber-400" />} onClose={onClose}>
+    <ModalShell
+      title="INITIATE BILATERAL ADJUDICATION"
+      icon={<Swords size={15} className="text-amber-400" />}
+      onClose={onClose}
+      // Wider than the default form card: this modal carries the bilateral
+      // matrix, whose whole point is reading two columns against each other.
+      maxWidth="max-w-2xl"
+    >
       <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
         Submit evidence of a treaty breach to empanel GenLayer multi-LLM validators for consensus
         arbitration. The filing is one half of the case: the accused party&apos;s own bound
