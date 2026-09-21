@@ -41,8 +41,8 @@ export default function FoundRealmModal({
 
   return (
     <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-md font-mono">
-      <div className="w-full max-w-lg rounded-lg border border-emerald-500/40 bg-slate-900 shadow-hud">
-        <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-emerald-500/40 bg-slate-900 shadow-hud">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-700/60 px-4 py-3">
           <div className="flex items-center gap-2">
             <Rocket size={16} className="text-emerald-400" />
             <span className="text-[12px] font-bold tracking-[0.2em] text-slate-100">
@@ -54,7 +54,7 @@ export default function FoundRealmModal({
           </button>
         </div>
 
-        <div className="p-4">
+        <div className="hud-scroll min-h-0 flex-1 overflow-y-auto p-4">
           <label className="mb-3 block">
             <span className="mb-1 block text-[10px] tracking-widest text-slate-400">
               ENCLAVE / AGENT NAME

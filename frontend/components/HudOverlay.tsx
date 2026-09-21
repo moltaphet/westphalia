@@ -763,8 +763,14 @@ function ModalShell({
 }) {
   return (
     <div className="pointer-events-auto absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 p-4 backdrop-blur-md">
-      <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 shadow-hud">
-        <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
+      {/* The card is bounded to the viewport and scrolls its own body. Without
+          the bound, `items-center` splits the overflow across both edges and the
+          first and last fields are unreachable at 100% zoom -- which is what the
+          dispute modal did once the bilateral matrix moved in above its submit
+          button. The header stays `shrink-0` so the title and the close control
+          remain on screen while the body scrolls beneath them. */}
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col rounded-lg border border-slate-700 bg-slate-900 shadow-hud">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-700/60 px-4 py-3">
           <div className="flex items-center gap-2">
             {icon}
             <span className="text-[12px] font-bold tracking-[0.2em] text-slate-100">{title}</span>
@@ -773,7 +779,7 @@ function ModalShell({
             <X size={16} />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="hud-scroll min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
       </div>
     </div>
   );
