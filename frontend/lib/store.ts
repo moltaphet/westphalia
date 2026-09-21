@@ -1062,6 +1062,10 @@ export function useWestphaliaStore() {
                       consensus: breach ? 100 : 66,
                       evidenceUri,
                       openedBlock: 1843000 + seq,
+                      // Recorded so the bilateral view can name the accused
+                      // party: on chain the defendant is whichever party did
+                      // not file, and its oracle role follows from that.
+                      plaintiff,
                     },
                   }
                 : x

@@ -352,6 +352,45 @@ unsupported by the evidence. A *contradictory or unreachable oracle pair* is no
 longer forced to `MALICIOUS_REPORT` -- that would let a defendant weaponize a
 feed it controls -- and instead settles neutrally as `FEED_CONFLICT`.
 
+### 4.5.1 Reading a dispute bilaterally
+
+The dispute UI carries this structure rather than hiding it. The filing modal is
+titled **INITIATE BILATERAL ADJUDICATION**, not "report", and both the modal and
+the treaty inspector mount a **BILATERAL VERIFICATION & DEFENSE MATRIX**: two
+columns, because a dispute has two halves.
+
+The left column is what a plaintiff can assert -- the filing party, the
+allegation, the evidence URI, and the SHA-256 it commits to. The right column is
+what the contract measures independently: the accused party, the role
+(`party_a` / `party_b`) both oracles are read against, each bound feed's own
+reading, the agreed metric, and the feed divergence against the 500 bps budget.
+The right column's readings are fetched live in the browser from the treaty's
+bound pair, then parsed under the contract's own strict rules.
+
+Three standing safeguards are named beneath it:
+
+* **Dual-feed cross-examination** -- what the two feeds said and what the
+  divergence budget did with it.
+* **Corridor clamp active** -- which of the three `_clamp_tier` corridors binds
+  at the measured metric, and therefore what verdict range is reachable at all.
+* **Defense standing and cooldown** -- whether the treaty carries dispute
+  standing, and the 300-second per-treaty cooldown between filings.
+
+One honest limit is printed rather than papered over: the contract has **no
+rebuttal phase**. The defense is automatic -- the defendant's own telemetry and
+the corridor that telemetry imposes -- not a time-boxed answer the defendant
+files. The panel says so instead of implying a window that does not exist.
+
+The arithmetic behind the panel lives in `frontend/lib/bilateral.ts` as a pure
+mirror of `_quantize_bps`, `_fetch_dual_telemetry` and `_clamp_tier`, and
+`tests/direct/test_bilateral_mirror.py` holds it against the contract source.
+Three of that guard's cases pin mistakes the mirror actually made: using
+JavaScript's half-up `Math.round` where Python's `round()` is half-to-even,
+collapsing a retryable feed fault (429/5xx, which reverts the dispute) into a
+definitive non-answer (which settles it neutrally), and a seeded board that
+accused a party sitting in the oracle slot its own committed feed reports as
+clean.
+
 ### 4.6 Lifecycle
 
 ```
@@ -837,7 +876,7 @@ telemetry/
                           incident-binding cases exercise.
 
 tests/
-  direct/                 In-memory contract suite (87 tests, ~110s). No network.
+  direct/                 In-memory contract suite (94 tests, ~115s). No network.
     conftest.py           GenVM v0.3 harness wiring.
     test_westphalia.py    9 baseline adversarial cases.
     test_westphalia_v2.py 6 V2 protocol cases.
@@ -866,6 +905,14 @@ tests/
                           budget, an unattributed reading is refused, and filing
                           it against the on-chain incident is admitted and judged
                           -- while a wrong digest is not admitted at all.
+    test_bilateral_mirror.py  7 cases holding the frontend's bilateral view
+                          against the contract it mirrors: the three band
+                          constants and the dispute cooldown, the quantizer's
+                          half-to-even rounding and its clamp-before-multiply
+                          order, the split between a retryable feed fault and a
+                          definitive non-answer, and the seeded board's guarantee
+                          that the party it accuses sits in the oracle slot its
+                          own committed telemetry reports.
   integration/            Full-consensus suite (5 tests). Needs a live network.
     test_westphalia.py    Deploy, found, propose, ratify, dispute, settle.
     fixtures.py           Expected state, kept beside the assertions that read it.
@@ -892,6 +939,13 @@ frontend/
     DiplomaticBoard.tsx   The r3f canvas.
     TopBar.tsx            Command strip + view switcher.
     HudOverlay.tsx        Dossier, treaty inspector, live feed, action modals.
+    BilateralMatrix.tsx   The BILATERAL VERIFICATION & DEFENSE MATRIX: a filing's
+                          allegation and committed evidence hash beside the
+                          accused party's own oracle readings, the agreed metric
+                          the corridor will bound the verdict by, and the three
+                          standing safeguards (dual-feed cross-examination,
+                          corridor clamp, defense standing). Reads the treaty's
+                          bound oracle pair live in the browser.
     ProceduralIsland.tsx  Per-enclave voxel island.
     RealmDirectory.tsx    Collapsible camera quick-jump drawer.
     FoundRealmModal.tsx   Found Sovereignty deployment modal.
@@ -913,6 +967,13 @@ frontend/
     kit.ts                Lazy Transaction Kit binding for the injected wallet.
     contract.ts           ABI, view binding, and the write-plan authorizer seam.
     chainState.ts         Chain snapshot -> domain model (pure).
+    bilateral.ts          The dispute's arithmetic, mirrored from the contract:
+                          the telemetry bands, `_quantize_bps`, the dual-feed
+                          cross-examination, and the three `_clamp_tier`
+                          corridors. Pure, so the panel is unit-testable without
+                          a network, and correct only insofar as it agrees with
+                          the chain -- `tests/direct/test_bilateral_mirror.py`
+                          holds it to that.
     archetypes.ts         Archetype presets + deterministic terrain seeds.
     world.ts, noise.ts    Orbital layout and procedural terrain.
     board.ts              Shared render constants and color maps.
@@ -1256,14 +1317,14 @@ wallet: it is chmod 0600 for a reason.
 
 Two runners, for two kinds of test.
 
-**Bare `pytest` runs the offline suites** -- 111 tests, no network, no keys, no
+**Bare `pytest` runs the offline suites** -- 118 tests, no network, no keys, no
 funded account:
 
 ```bash
-# Both suites: 111 tests.
+# Both suites: 118 tests.
 .venv/bin/python -m pytest -q
 
-# Contract only (direct mode): 87 tests, in-memory, ~110s.
+# Contract only (direct mode): 94 tests, in-memory, ~115s.
 .venv/bin/python -m pytest tests/direct/ -q
 
 # Agents only: 24 tests.
@@ -1678,9 +1739,9 @@ what `test_evidence_hash_gate_decides_the_verdict` pins in the direct suite.
 | Check | Command | Result |
 |---|---|---|
 | Contract lint | `.venv/bin/genvm-lint check contracts/westphalia.py` | Lint and validation both pass; 23 methods (11 view, 12 write). |
-| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 79 passed. |
+| Contract tests | `.venv/bin/python -m pytest tests/direct/ -q` | 94 passed. |
 | Agent tests | `.venv/bin/python -m pytest agent/ -q` | 24 passed. |
-| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 103 collected (79 direct + 24 agent). |
+| Test collection | `.venv/bin/python -m pytest --collect-only -q` | 118 collected (94 direct + 24 agent). |
 | Type check | `cd frontend && npx tsc --noEmit` | Exit 0, clean. |
 | Lint | `cd frontend && npx eslint . --max-warnings=0` | Exit 0, no warnings. |
 | Production build | `cd frontend && npm run build` | 0 TypeScript, lint, and SSR/Canvas errors. |

@@ -248,6 +248,11 @@ export function mapRecords(raw: RawRecords): ChainSnapshot {
       // the on-chain treaty id is the stable identifier.
       createdBlock: 0,
       terms: asString(rec.terms),
+      // The feeds the parties bound at proposal time, carried through so the
+      // dispute view can read the defendant's own telemetry rather than
+      // describing it. Read verbatim from contract storage.
+      oraclePrimary: asString(rec.oracle_primary) || undefined,
+      oracleSecondary: asString(rec.oracle_secondary) || undefined,
     });
 
     // One feed line per treaty, phrased in the contract's own vocabulary so

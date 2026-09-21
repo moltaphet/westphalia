@@ -1,19 +1,38 @@
 import type { ConsensusAudit, LedgerEvent, Treaty } from "./types";
 
-// The oracle pair the seeded scene's audits report. These are the SAME two
-// public documents the live treaties bind at proposal time (see
-// agent/telemetry.py), and they are the only endpoints in this file that
-// actually serve telemetry.
+// The two independent hosts the protocol's oracles are served from: GitHub raw
+// and the jsDelivr GitHub CDN. The contract requires the pair to sit on distinct
+// hostnames, and because both serve the SAME committed document, every validator
+// reads byte-identical bytes.
 //
-// This field previously read a `gl.nondet.web GET` line against the GenLayer
+// This file previously advertised a `gl.nondet.web GET` line against the GenLayer
 // Studio web app host. That host resolves, but every path under it answers HTTP
 // 200 with the same HTML page, so a reader taking the panel at its word would
 // find a "feed" serving no telemetry at all. A contract fetching it would parse
 // nothing and settle the dispute as a neutral feed conflict. The seeded scene
 // now advertises the pair the protocol really reads.
+const ORACLE_PRIMARY_BASE = "raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/";
+const ORACLE_SECONDARY_BASE = "cdn.jsdelivr.net/gh/moltaphet/westphalia@main/telemetry/";
+
+// The two committed pairs. Each document reports a metric PER PARTY
+// (`{"party_a": ..., "party_b": ...}`), and adjudication reads only the accused
+// party's own slot.
+//
+// The seeded treaties below bind one of these pairs, and the pair a treaty binds
+// is what decides whether the seeded fiction holds together: the breach pair
+// reports the breach on `party_b`, so a seeded treaty whose defendant sits in
+// the `party_a` slot would be refuted by its own live telemetry. The seed is
+// arranged so every accused party occupies the slot its feed reports.
+const oraclePair = (name: "breach" | "calm") => ({
+  oraclePrimary: `https://${ORACLE_PRIMARY_BASE}${name}_primary.json`,
+  oracleSecondary: `https://${ORACLE_SECONDARY_BASE}${name}_secondary.json`,
+});
+
+// The pair the seeded audits narrate, so the audit panel and the bilateral panel
+// describe one pair rather than two.
 const MOCK_ORACLE_PAIR =
-  "gl.nondet.web GET raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/breach_primary.json" +
-  "  |  cdn.jsdelivr.net/gh/moltaphet/westphalia@main/telemetry/breach_secondary.json";
+  `gl.nondet.web GET ${ORACLE_PRIMARY_BASE}breach_primary.json` +
+  `  |  ${ORACLE_SECONDARY_BASE}breach_secondary.json`;
 
 export const TREATIES: Treaty[] = [
   {
@@ -23,6 +42,9 @@ export const TREATIES: Treaty[] = [
     parties: ["alpha", "vanguard"],
     bondGen: 42000,
     createdBlock: 1840221,
+    // A healthy corridor: the calm pair reads both parties well below the
+    // negligible threshold, so no corridor would let a filing slash either side.
+    ...oraclePair("calm"),
     terms:
       "Reciprocal compute-credit trade corridor with 2 percent settlement fee cap and 24h dispute window.",
   },
@@ -33,26 +55,35 @@ export const TREATIES: Treaty[] = [
     parties: ["vanguard", "enclave"],
     bondGen: 26500,
     createdBlock: 1841004,
+    ...oraclePair("calm"),
     terms:
       "Encrypted telemetry exchange with revocation on validated privacy breach.",
   },
   {
     id: "t3",
+    // The seeded scene's one adjudicated treaty. `enclave` is `party_a` and the
+    // plaintiff; `alpha` is `party_b` and therefore the accused. The order
+    // matters: the breach pair reports the breach on the `party_b` slot, so
+    // Alpha has to hold that slot for the seed's own live telemetry to corroborate
+    // the BREACH verdict below rather than refute it.
     kind: "non-aggression",
-    status: "pending",
-    parties: ["alpha", "enclave"],
+    status: "breached",
+    parties: ["enclave", "alpha"],
     bondGen: 21500,
     createdBlock: 1842790,
     dispute: {
       validators: 5,
       consensus: 62,
-      // The seeded scene's filing names the same committed telemetry document
-      // the dispute form defaults to, so the URI the panel prints is one the
-      // contract's SSRF gate admits and the contract can actually fetch.
+      // `enclave` holds t3's `party_a` slot and filed; Alpha is the accused.
+      plaintiff: "enclave",
+      // The seeded scene's filing names a committed telemetry document, so the
+      // URI the panel prints is one the contract's SSRF gate admits and the
+      // contract can actually fetch.
       evidenceUri:
         "https://raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/breach_primary.json",
       openedBlock: 1842991,
     },
+    ...oraclePair("breach"),
     terms:
       "Mutual non-aggression across the violet frontier. Contested clause under multi-LLM review.",
   },
@@ -63,6 +94,8 @@ export const TREATIES: Treaty[] = [
     parties: ["vanguard", "bastion"],
     bondGen: 12800,
     createdBlock: 1839550,
+    // Bastion is `party_b` and the accused, matching the breach pair's slot.
+    ...oraclePair("breach"),
     terms:
       "Non-aggression pact voided after validated incursion. Bond forfeited to protocol treasury.",
   },
@@ -149,8 +182,9 @@ export const LEDGER: LedgerEvent[] = [
     id: "e2",
     block: 1842790,
     kind: "treaty-proposed",
-    actor: "alpha",
-    message: "Non-aggression treaty t3 proposed to Sovereign Enclave.",
+    // `enclave` holds t3's `party_a` slot, and the proposer is `party_a`.
+    actor: "enclave",
+    message: "Non-aggression treaty t3 proposed to Citadel Alpha.",
     valueGen: 21500,
   },
   {

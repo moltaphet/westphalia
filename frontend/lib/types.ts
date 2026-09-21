@@ -80,6 +80,18 @@ export interface Treaty {
   // On-chain treaty id (contracts index treaties from 1). Captured from the
   // protocol counter after a live propose; undefined in simulated mode.
   chainId?: number;
+  // The two independent telemetry oracles both parties agreed to at proposal
+  // time, read from contract storage. These are the defendant's co-equal
+  // evidence in a dispute: adjudication fetches both, reads only the accused
+  // party's attributed metric from each, and cross-examines them. They cannot be
+  // changed by a filing, which is what stops a plaintiff aiming adjudication at
+  // a feed of its own choosing.
+  //
+  // `parties[0]` is on-chain `party_a` and `parties[1]` is `party_b`, so the
+  // role the contract reads for a given filing is derived, not stored: it is the
+  // role of whichever party is NOT the plaintiff.
+  oraclePrimary?: string;
+  oracleSecondary?: string;
   // True once the local actor has registered a unilateral exit notice
   // (exit_treaty phase 1); the second call executes it post-notice.
   exitRequested?: boolean;
@@ -89,6 +101,11 @@ export interface Treaty {
     consensus: number; // 0 - 100 percent in favor
     evidenceUri: string;
     openedBlock: number;
+    // The enclave that filed -- the plaintiff. Recorded because the bilateral
+    // view needs it: the accused party is the OTHER treaty party, and which
+    // oracle slot the contract reads is derived from that split rather than
+    // stored on chain. Absent on records written before this was captured.
+    plaintiff?: string;
   };
   terms: string;
 }

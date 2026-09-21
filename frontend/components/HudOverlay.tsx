@@ -30,6 +30,7 @@ import type {
 import { auditForEvent, shortAddress } from "@/lib/mockData";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/board";
 import RealmDirectory from "./RealmDirectory";
+import BilateralMatrix from "./BilateralMatrix";
 
 interface Props {
   state: ProtocolState;
@@ -118,6 +119,17 @@ function MeterBar({ label, score }: { label: string; score: number }) {
         />
       </div>
     </div>
+  );
+}
+
+// The display name of a treaty party, for the bilateral view of a dispute that
+// has no form open to resolve the plaintiff from selection the way the filing
+// modal does.
+function nameOfDisputeParty(state: ProtocolState, treaty: Treaty, id: string): string {
+  return (
+    state.enclaves.find((e) => e.id === id)?.name ??
+    state.enclaves.find((e) => e.address === id)?.name ??
+    shortAddress(id)
   );
 }
 
@@ -371,9 +383,10 @@ function Dossier({
                         </button>
                         <button
                           onClick={() => onDispute(treaty.id)}
+                          title="File a claim for GenLayer bilateral adjudication against this covenant"
                           className="rounded border border-red-500/50 bg-red-500/15 py-1.5 text-[10px] font-bold tracking-widest text-red-200 hover:bg-red-500/25"
                         >
-                          DISPUTE
+                          INITIATE BILATERAL ADJUDICATION
                         </button>
                       </>
                     )}
@@ -394,6 +407,45 @@ function Dossier({
                         {treaty.dispute.validators} validators - consensus{" "}
                         {treaty.dispute.consensus}%
                       </div>
+                    </div>
+                  )}
+                  {/* The bilateral record of the dispute that produced this
+                      ruling. Rendered from the same treaty facts the filing was
+                      measured against, so the viewer can see the defense the
+                      defendant had rather than only the plaintiff's claim. */}
+                  {treaty.dispute && (
+                    <div className="mt-2">
+                      <BilateralMatrix
+                        plaintiffLabel={nameOfDisputeParty(
+                          state,
+                          treaty,
+                          treaty.dispute.plaintiff ?? treaty.parties[0]
+                        )}
+                        defendantLabel={nameOfDisputeParty(
+                          state,
+                          treaty,
+                          treaty.parties.find(
+                            (p) => p !== (treaty.dispute?.plaintiff ?? treaty.parties[0])
+                          ) ?? treaty.parties[1]
+                        )}
+                        plaintiffIsPartyA={
+                          (treaty.dispute.plaintiff ?? treaty.parties[0]) ===
+                          treaty.parties[0]
+                        }
+                        allegation=""
+                        evidenceUri={treaty.dispute.evidenceUri}
+                        evidenceHash=""
+                        oracles={
+                          treaty.oraclePrimary && treaty.oracleSecondary
+                            ? {
+                                primary: treaty.oraclePrimary,
+                                secondary: treaty.oracleSecondary,
+                              }
+                            : null
+                        }
+                        evidencePresent={Boolean(treaty.dispute.evidenceUri)}
+                        treatyOpen={treaty.status === "active"}
+                      />
                     </div>
                   )}
                 </div>
@@ -870,11 +922,15 @@ async function digestOf(uri: string): Promise<string> {
 
 function DisputeModal({
   treaties,
+  enclaves,
+  selectedId,
   preselect,
   onClose,
   onSubmit,
 }: {
   treaties: Treaty[];
+  enclaves: AgentEnclave[];
+  selectedId: string | null;
   preselect?: string | null;
   onClose: () => void;
   onSubmit: (
@@ -903,6 +959,24 @@ function DisputeModal({
   const derived = digestUri !== null && digestUri === uri;
   const ready = Boolean(treatyId) && allegation.trim().length > 0 && uriOk && hashOk;
 
+  // The filing party, resolved exactly the way the store resolves it for the
+  // write -- `selectedId` when it is a party to the target treaty, else the
+  // treaty's first party -- so the matrix on screen and the call the button
+  // submits describe one and the same dispute. The accused party is the other
+  // one, and the contract derives its oracle role from exactly that split.
+  const target = treaties.find((t) => t.id === treatyId) ?? null;
+  const parties: readonly string[] = target?.parties ?? [];
+  const plaintiffId =
+    selectedId && parties.includes(selectedId) ? selectedId : parties[0] ?? null;
+  const plaintiffIsPartyA = Boolean(plaintiffId) && parties[0] === plaintiffId;
+  const defendantId = parties.find((p) => p !== plaintiffId) ?? parties[1] ?? null;
+  const nameOf = (id: string | null) =>
+    (id && enclaves.find((e) => e.id === id)?.name) || id || "unresolved";
+  const oraclePair =
+    target?.oraclePrimary && target?.oracleSecondary
+      ? { primary: target.oraclePrimary, secondary: target.oracleSecondary }
+      : null;
+
   const derive = useCallback(async (target: string) => {
     setReading(true);
     setReadError(null);
@@ -924,10 +998,11 @@ function DisputeModal({
   }, [derive]);
 
   return (
-    <ModalShell title="TRIGGER DISPUTE" icon={<Swords size={15} className="text-amber-400" />} onClose={onClose}>
+    <ModalShell title="INITIATE BILATERAL ADJUDICATION" icon={<Swords size={15} className="text-amber-400" />} onClose={onClose}>
       <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
         Submit evidence of a treaty breach to empanel GenLayer multi-LLM validators for consensus
-        arbitration.
+        arbitration. The filing is one half of the case: the accused party&apos;s own bound
+        telemetry is read independently and bounds whatever the tribunal may return.
       </p>
       {treaties.length === 0 ? (
         <p className="mb-3 text-[11px] leading-relaxed text-amber-300">
@@ -951,6 +1026,24 @@ function DisputeModal({
           onChange={(e) => setAllegation(e.target.value)}
         />
       </Field>
+      {/* Live and bilateral: the right column is read from the treaty's own
+          bound oracles as the form is filled in, so what the filing is measured
+          against is on screen before anything is signed. */}
+      {target && (
+        <div className="mb-3">
+          <BilateralMatrix
+            plaintiffLabel={nameOf(plaintiffId)}
+            defendantLabel={nameOf(defendantId)}
+            plaintiffIsPartyA={plaintiffIsPartyA}
+            allegation={allegation}
+            evidenceUri={uri}
+            evidenceHash={canonHash(evidenceHash)}
+            oracles={oraclePair}
+            evidencePresent={hashOk && uriOk}
+            treatyOpen={target.status === "active"}
+          />
+        </div>
+      )}
       <Field label="EVIDENCE URI (http/https)">
         <input
           className={inputCls}
@@ -989,12 +1082,16 @@ function DisputeModal({
                   ? "Read from the URI just now. The contract re-fetches the same document in-round, so the two agree."
                   : "Typed by hand. If it is not the digest of the served bytes, the filing is adjudicated on NO_EVIDENCE."}
       </p>
+      <p className="mb-3 rounded border border-slate-700/60 bg-slate-800/40 px-2.5 py-2 text-[10px] leading-relaxed text-slate-400">
+        Disputes evaluate both plaintiff evidence and defendant live oracle feeds
+        before any validator quorum is reached.
+      </p>
       <button
         onClick={() => onSubmit(treatyId, allegation.trim(), evidenceUri.trim(), canonHash(evidenceHash))}
         disabled={!ready}
         className="mt-2 w-full rounded border border-amber-500/50 bg-amber-500/15 py-2 text-[12px] font-bold tracking-widest text-amber-200 hover:bg-amber-500/25 disabled:opacity-40"
       >
-        SUBMIT TO VALIDATOR CONSENSUS
+        SUBMIT TO BILATERAL ADJUDICATION
       </button>
     </ModalShell>
   );
@@ -1184,6 +1281,8 @@ export default function HudOverlay({
       {modal === "dispute" && (
         <DisputeModal
           treaties={disputableTreaties}
+          enclaves={state.enclaves}
+          selectedId={selectedId}
           preselect={disputeTarget}
           onClose={() => setModal(null)}
           onSubmit={(id, allegation, evidenceUri, evidenceHash) => {
