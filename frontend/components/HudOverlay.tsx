@@ -837,8 +837,13 @@ function ProposeModal({
 // repository commits and the recorded run filed against, so the pair on open is
 // a real one rather than a well-formed example that matches no endpoint.
 const DISPUTE_ALLEGATION = "Breach of latency threshold on secondary node";
+// The default filing names an INCIDENT REPORT rather than a bare metric dump.
+// The document is self-describing: it carries the reported target's address and
+// the treaty it is party to, and every one of those fields is checkable against
+// `get_treaty` and the enclave roster. The tribunal therefore reads a record it
+// can attribute to a specific address, not an unattributed reading.
 const DISPUTE_EVIDENCE_URI =
-  "https://raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/breach_primary.json";
+  "https://raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/incident_meridian_0001.json";
 
 // Mirrors the contract's `_canon_hash`: a leading `0x` and any casing are
 // accepted on the way in, because every explorer prints the digest that way.

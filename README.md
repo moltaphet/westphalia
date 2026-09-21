@@ -58,6 +58,20 @@ code layer only backstops the tribunal, it never replaces it.
   render-vs-GET choice all drop out of the verification. The on-chain record is
   therefore tied to the exact bytes the tribunal judged, and a validator cannot be
   argued onto a different document than the one the filing named.
+- **The document identifies the party it accuses.** A digest binds bytes, not
+  meaning: it proves the tribunal read the document the filing named, but by
+  itself it does not prove that document is *about* the defendant. A plaintiff
+  could therefore commit to a hash of an unrelated page and have a coherent
+  document admitted against the wrong party. The filing side closes this by
+  requiring the evidence document to be self-describing -- carrying the accused
+  address, its role in the treaty, and the treaty id -- and by refusing to file a
+  document that does not name a target it can resolve to the treaty on trial
+  (`agent/telemetry.py::incident_binding`). Because the V4.2 digest transitively
+  commits to those bytes, the attribution reaches the tribunal under the same
+  cryptographic guarantee as the evidence itself. The shipped reference document
+  is [`telemetry/incident_meridian_0001.json`](telemetry/incident_meridian_0001.json),
+  which names the on-chain incident it reports and states the three checks a
+  reader can run to confirm the binding.
 - The code-side clamp is a **narrow anti-hallucination guardrail, not an
   arithmetic `if/else` replacement**. It draws three corridors around the band
   the objective metric can support: at **2500 bps or above** a breach report can
@@ -519,6 +533,19 @@ Inside the non-deterministic block:
 > engine-specific layout drift. Evidence endpoints are expected to serve static
 > audit artifacts.
 
+> **Admissible evidence names its target.** The contract verifies *what* the
+> document is (its digest); it cannot verify *who* the document is about, because
+> the deployed revision has no field for an accused address and its prompt cannot
+> be changed in place. The convention is therefore carried by the document: an
+> incident report declares the accused address, its `party_a`/`party_b` role and
+> the treaty id, and `agent/telemetry.incident_binding` resolves that declaration
+> against the treaty on file before a dispute is filed. A document that names no
+> target, or names one that cannot be matched to the treaty being litigated, is
+> refused client-side -- so the bytes the digest later binds are known to be about
+> the defendant before they are ever committed to. The contract's own telemetry
+> reader requires the same `party_a`/`party_b` shape of the oracle documents, so
+> one schema governs both the oracles and the evidence.
+
 ### 5.5 Adversarial hardening
 
 Every defense below was first confirmed as a *working exploit* against an
@@ -799,8 +826,18 @@ anything twice.
 contracts/
   westphalia.py           The protocol. 23 public methods.
 
+telemetry/
+  breach_*.json           Oracle feeds. Party-attributed metrics served from two
+  calm_*.json             independent CDNs (GitHub raw + jsDelivr), so both
+                          validators and the contract fetch byte-identical bytes.
+  incident_meridian_0001.json  A target-bound incident report: the reference
+                          evidence document, naming the accused enclave, its
+                          treaty role, the treaty id, and the on-chain incident
+                          it reports. Filing it is what the direct suite's
+                          incident-binding cases exercise.
+
 tests/
-  direct/                 In-memory contract suite (79 tests, ~110s). No network.
+  direct/                 In-memory contract suite (87 tests, ~110s). No network.
     conftest.py           GenVM v0.3 harness wiring.
     test_westphalia.py    9 baseline adversarial cases.
     test_westphalia_v2.py 6 V2 protocol cases.
@@ -822,6 +859,13 @@ tests/
                           degrades to NO_EVIDENCE, the digest the plaintiff
                           commits to decides the verdict, and a 0x-prefixed
                           digest is judged on the digest and not its notation.
+    test_incident_binding.py  8 cases that pin the shipped incident report as
+                          admissible: the document parses the way the contract's
+                          own telemetry reader reads it, it binds the target it
+                          names, it reaches the tribunal inside the 1,500-char
+                          budget, an unattributed reading is refused, and filing
+                          it against the on-chain incident is admitted and judged
+                          -- while a wrong digest is not admitted at all.
   integration/            Full-consensus suite (5 tests). Needs a live network.
     test_westphalia.py    Deploy, found, propose, ratify, dispute, settle.
     fixtures.py           Expected state, kept beside the assertions that read it.
@@ -830,7 +874,9 @@ agent/                    Two-agent autonomous duet (24 tests).
   agent.py                Decision loop; founds, negotiates, litigates.
   decider.py              Proposal scoring against the agent's own charter.
   profiles.py             ALICE / BOB charters, archetypes, constraints.
-  telemetry.py            Deterministic oracle-feed arithmetic.
+  telemetry.py            Deterministic oracle-feed arithmetic, plus the
+                          incident-binding check that refuses to file an
+                          evidence document naming no resolvable target.
   chain.py                GenLayer client wrapper: funding, views, writes, receipts.
   keys.py                 Per-agent keystore (agent/keys/<name>.key.json, 0600).
   demo.py                 The end-to-end duet.
@@ -853,6 +899,9 @@ frontend/
                           over the board for every live write.
     GlobalFeedback.tsx    Transaction pipeline overlay + toasts.
     IntroOverlay.tsx      Entry overlay.
+    AboutModal.tsx        The ABOUT panel: the protocol loop, why GenLayer is
+                          load-bearing, the tier/settlement table, the solvency
+                          identity, the live deployment, and the repository link.
     scene/                Citadel, TreatyArc, TreatyLinks, TreatyMotes,
                           Causeways, DisputeDome, ContainmentGrid,
                           CentralPlatform, ParticleField.
@@ -868,6 +917,10 @@ frontend/
     world.ts, noise.ts    Orbital layout and procedural terrain.
     board.ts              Shared render constants and color maps.
     mockData.ts           Reviewer-mode seed data, used only when unreachable.
+                          The seeded audits name the same committed telemetry
+                          documents the contract reads, so a reviewer clicking a
+                          seeded verdict sees a source that actually resolves
+                          rather than a placeholder host.
 
 deploy/
   deployScript.ts         `genlayer deploy` entry point. Reads the contract,
@@ -1203,14 +1256,14 @@ wallet: it is chmod 0600 for a reason.
 
 Two runners, for two kinds of test.
 
-**Bare `pytest` runs the offline suites** -- 103 tests, no network, no keys, no
+**Bare `pytest` runs the offline suites** -- 111 tests, no network, no keys, no
 funded account:
 
 ```bash
-# Both suites: 103 tests.
+# Both suites: 111 tests.
 .venv/bin/python -m pytest -q
 
-# Contract only (direct mode): 79 tests, in-memory, ~110s.
+# Contract only (direct mode): 87 tests, in-memory, ~110s.
 .venv/bin/python -m pytest tests/direct/ -q
 
 # Agents only: 24 tests.

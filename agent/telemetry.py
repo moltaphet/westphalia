@@ -28,6 +28,7 @@ points, so the LLM sees a stable integer either way.
 """
 
 import hashlib
+import json
 import urllib.request
 
 # GitHub repository the static telemetry documents are committed to.
@@ -77,6 +78,34 @@ CALM_FEEDS = (
     _secondary_url("telemetry/calm_secondary.json"),
 )
 
+# Incident reports, as opposed to the bare metric readings above. A filing's
+# evidence document is chosen by the plaintiff at dispute time (unlike the
+# oracles, which are fixed in treaty storage at proposal time), so this is the
+# one input the protocol can require to be self-describing.
+#
+# A bare ``{"party_a": .., "party_b": ..}`` reading says a deviation happened
+# but not to whom: it names no address, no treaty, and no event, so a tribunal
+# ruling on it is ruling on an unattributed number. The documents below carry
+# the reported target's address and the treaty it is party to, and every field
+# in them is checkable against contract storage -- ``get_treaty(id)`` and the
+# enclave roster -- so the reading is attributable to one address rather than to
+# whoever the filer says it is about.
+#
+# They keep the same party-attributed metric shape the contract parses, so a
+# filing that commits one is adjudicated exactly like any other document.
+INCIDENT_FEEDS = (_primary_url("telemetry/incident_meridian_0001.json"),)
+
+# The target each incident report names, and the on-chain record that binds it.
+# Read from the document at runtime by ``incident_binding``; kept here so tests
+# and narration can assert the binding without a network read.
+INCIDENT_TARGETS = {
+    INCIDENT_FEEDS[0]: {
+        "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+        "role": "party_b",
+        "treaty_id": 2,
+    },
+}
+
 # The party-attributed metric each feed reports, mirroring the committed JSON.
 # The feeds are static documents (not self-describing URLs), so narration and
 # tests read the metric from here rather than decoding it from the URL. Keep in
@@ -125,4 +154,75 @@ def evidence_digest(url: str, timeout: float = 20.0) -> str | None:
         return None
     text = raw.decode("utf-8", "replace")
     return hashlib.sha256(text.encode("utf-8")).hexdigest().lower()
+
+
+def _is_address(value: str) -> bool:
+    """True for a 0x-prefixed 20-byte hex address."""
+    if len(value) != 42 or not value.startswith("0x"):
+        return False
+    try:
+        int(value[2:], 16)
+    except ValueError:
+        return False
+    return True
+
+
+def _binding_of(doc) -> dict | None:
+    """The target binding a parsed incident document declares, or None.
+
+    Kept separate from the fetch so a caller already holding the document -- a
+    test, or a client that read it off the treaty record -- can check the binding
+    without a second network read."""
+    if not isinstance(doc, dict):
+        return None
+    target = doc.get("target")
+    treaty = doc.get("treaty")
+    if not isinstance(target, dict) or not isinstance(treaty, dict):
+        return None
+    address = target.get("address")
+    role = target.get("role")
+    treaty_id = treaty.get("id")
+    # A binding needs an address, the party key the reading is filed under, and
+    # the treaty that makes that address a party to this dispute. Missing any one
+    # leaves the reading unattributable, which is the state this refuses.
+    if not isinstance(address, str) or not _is_address(address):
+        return None
+    if role not in ("party_a", "party_b"):
+        return None
+    if not isinstance(treaty_id, int) or isinstance(treaty_id, bool):
+        return None
+    # The metric must be filed under the very role the binding names, or the
+    # address and the number are describing different parties.
+    metric = doc.get(role)
+    if isinstance(metric, bool) or not isinstance(metric, (int, float)):
+        return None
+    return {"address": address.lower(), "role": role, "treaty_id": treaty_id}
+
+
+def incident_binding(url: str, timeout: float = 20.0) -> dict | None:
+    """Read an incident report and return the target it binds to, or None when
+    the document cannot be read or binds to no target.
+
+    The contract cannot require this of a filing: its prompt is fixed at deploy
+    time and it parses whatever the party-attributed keys hold, so an
+    unattributed reading is admissible on chain and a tribunal will rule on it.
+    This is the filing side holding itself to the stricter rule -- a plaintiff
+    that cannot show who a reading is about does not file it.
+
+    On success returns ``{"address", "role", "treaty_id"}``, every field of which
+    is checkable against contract storage: ``get_treaty(treaty_id)`` names the
+    address as the party holding ``role``."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _UA})
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            if not (200 <= res.status < 300):
+                return None
+            raw = res.read()
+    except Exception:
+        return None
+    try:
+        doc = json.loads(raw.decode("utf-8", "replace"))
+    except Exception:
+        return None
+    return _binding_of(doc)
 

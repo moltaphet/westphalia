@@ -132,7 +132,10 @@ export const INITIAL_ENCLAVES: AgentEnclave[] = [
     ],
     summary:
       "Sanctioned after a validated treaty breach. Stake partially slashed and territory under containment grid.",
-    governance: "Sanctioned: treaty automation suspended pending appeal.",
+    // A sanctioned enclave is barred from proposing or ratifying treaties and
+    // from withdrawing collateral, and the sanction is written to rep_history so
+    // it survives a re-founding. There is no appeal stage to wait for.
+    governance: "Sanctioned: treaty automation and collateral withdrawal are suspended.",
   },
 ];
 

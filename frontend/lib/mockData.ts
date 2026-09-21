@@ -1,5 +1,20 @@
 import type { ConsensusAudit, LedgerEvent, Treaty } from "./types";
 
+// The oracle pair the seeded scene's audits report. These are the SAME two
+// public documents the live treaties bind at proposal time (see
+// agent/telemetry.py), and they are the only endpoints in this file that
+// actually serve telemetry.
+//
+// This field previously read a `gl.nondet.web GET` line against the GenLayer
+// Studio web app host. That host resolves, but every path under it answers HTTP
+// 200 with the same HTML page, so a reader taking the panel at its word would
+// find a "feed" serving no telemetry at all. A contract fetching it would parse
+// nothing and settle the dispute as a neutral feed conflict. The seeded scene
+// now advertises the pair the protocol really reads.
+const MOCK_ORACLE_PAIR =
+  "gl.nondet.web GET raw.githubusercontent.com/moltaphet/westphalia/main/telemetry/breach_primary.json" +
+  "  |  cdn.jsdelivr.net/gh/moltaphet/westphalia@main/telemetry/breach_secondary.json";
+
 export const TREATIES: Treaty[] = [
   {
     id: "t1",
@@ -65,7 +80,7 @@ export const LEDGER: LedgerEvent[] = [
         "Neither party shall stage compute or logistics assets within 3 tiles of the counterparty citadel without 24h prior notice.",
       telemetry:
         "positioning feed shows 42 unannounced Alpha logistics assets at range 1.8 tiles from Enclave core for 6h17m.",
-      telemetrySource: "gl.nondet.web GET studio-dev.genlayer.com/feeds/frontier-positioning",
+      telemetrySource: MOCK_ORACLE_PAIR,
       validators: [
         {
           id: "Validator A",
@@ -93,7 +108,7 @@ export const LEDGER: LedgerEvent[] = [
       rationale:
         "Equivalence principle: 2 of 3 validators converge on BREACH with agreement above the 0.66 quorum threshold. Minority transit hypothesis is not supported by the dwell-time signal.",
       penalty:
-        "Bond of 21,500 GEN placed in protective escrow pending appeal window. Reputation debit queued for Citadel Alpha.",
+        "Defendant bond forfeited to the plaintiff and the enclave sanctioned: reputation zeroed, collateral moved to protocol reserves. Settlement is final at the verdict -- the contract has no appeal stage, and proceeds are held as a claimable balance the winner withdraws itself.",
       transcript: [
         {
           speaker: "Leader",
@@ -125,8 +140,8 @@ export const LEDGER: LedgerEvent[] = [
         { label: "Evidence ingested", block: 1842991, done: true },
         { label: "Quorum deliberation", block: 1842994, done: true },
         { label: "Verdict finalized", block: 1842997, done: true },
-        { label: "Appeal window (open)", block: 1843600, done: false },
-        { label: "Escrow settlement", block: 1843600, done: false },
+        { label: "Bonds released to plaintiff", block: 1842998, done: true },
+        { label: "Payout claimable by winner", block: 1842998, done: true },
       ],
     },
   },
@@ -150,7 +165,7 @@ export const LEDGER: LedgerEvent[] = [
         "Signatories pledge mutual non-aggression; no offensive resource denial against counterparty settlement routes.",
       telemetry:
         "route-health feed reports Vanguard settlement path throttled 71% coincident with Bastion egress spike; correlation 0.94.",
-      telemetrySource: "gl.nondet.web GET studio-dev.genlayer.com/feeds/settlement-route-health",
+      telemetrySource: MOCK_ORACLE_PAIR,
       validators: [
         {
           id: "Validator A",

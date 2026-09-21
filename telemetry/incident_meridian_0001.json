@@ -1,0 +1,37 @@
+{
+  "schema": "westphalia.incident.v1",
+  "incident_id": "WX-0001",
+  "target": {
+    "address": "0xD0C66f72add962e469d002De98c36F300Ad2eE7f",
+    "label": "Meridian",
+    "role": "party_b"
+  },
+  "treaty": {
+    "id": 2,
+    "kind": "DATA_SHARING",
+    "counterparty": "0xf462cD7ac15b71d834579C77f01c1E9165B1fb2e",
+    "counterparty_label": "Halcyon"
+  },
+  "metric": {
+    "name": "counterparty_disclosure_rate",
+    "unit": "ratio",
+    "window_samples": 288
+  },
+  "party_a": 0.0,
+  "party_b": 0.8,
+  "contradiction": false,
+  "binding": {
+    "kind": "on-chain treaty record",
+    "check": [
+      "get_treaty(2) returns status SETTLED, party_b equal to target.address, party_a equal to treaty.counterparty",
+      "get_enclave(target.address) returns status SANCTIONED with reputation 0 and collateral 0",
+      "get_protocol_overview() reports solvent true"
+    ],
+    "note": "The target is a named party to the cited treaty, so this reading is attributable to that address and to no other. A filing commits to these exact bytes by SHA-256, checked on chain against the raw response body."
+  },
+  "resolved_on_chain": {
+    "treaty_status": "SETTLED",
+    "enclave_status": "SANCTIONED",
+    "reading_bps": 8000
+  }
+}
